@@ -1,0 +1,258 @@
+{
+    "research_question_types": {
+        "what": {
+            "description": "Descriptive questions about phenomena or characteristics",
+            "indicators": [
+                "what is",
+                "what are",
+                "characteristics of",
+                "properties of",
+                "describe"
+            ],
+            "examples": [
+                "What is the structure of X?",
+                "What are the properties of Y?"
+            ],
+            "weight": 0.8
+        },
+        "how": {
+            "description": "Mechanistic or process questions",
+            "indicators": [
+                "how does",
+                "how do",
+                "mechanism of",
+                "process of",
+                "method for"
+            ],
+            "examples": [
+                "How does X affect Y?",
+                "How can we improve Z?"
+            ],
+            "weight": 1.0
+        },
+        "why": {
+            "description": "Explanatory or causal questions",
+            "indicators": [
+                "why does",
+                "why do",
+                "cause of",
+                "reason for",
+                "explain"
+            ],
+            "examples": [
+                "Why does X lead to Y?",
+                "Why is Z important?"
+            ],
+            "weight": 1.0
+        }
+    },
+    "methodology_patterns": {
+        "experimental": {
+            "description": "Controlled experiments with variables",
+            "indicators": [
+                "experiment",
+                "control group",
+                "treatment",
+                "randomized",
+                "ablation study",
+                "A/B test"
+            ],
+            "strength": 1.0,
+            "required_elements": [
+                "hypothesis",
+                "experimental design",
+                "results"
+            ]
+        },
+        "theoretical": {
+            "description": "Mathematical or logical derivation",
+            "indicators": [
+                "theorem",
+                "proof",
+                "derivation",
+                "formal analysis",
+                "mathematical model"
+            ],
+            "strength": 0.9,
+            "required_elements": [
+                "assumptions",
+                "formalism",
+                "proof"
+            ]
+        },
+        "empirical": {
+            "description": "Data-driven analysis without controlled experiments",
+            "indicators": [
+                "dataset",
+                "benchmark",
+                "evaluation",
+                "metrics",
+                "comparison"
+            ],
+            "strength": 0.85,
+            "required_elements": [
+                "data description",
+                "analysis method",
+                "results"
+            ]
+        },
+        "survey": {
+            "description": "Literature review or systematic survey",
+            "indicators": [
+                "survey",
+                "review",
+                "systematic",
+                "taxonomy",
+                "categorization"
+            ],
+            "strength": 0.7,
+            "required_elements": [
+                "scope definition",
+                "methodology",
+                "synthesis"
+            ]
+        },
+        "case_study": {
+            "description": "In-depth analysis of specific cases",
+            "indicators": [
+                "case study",
+                "real-world",
+                "application",
+                "deployment",
+                "practice"
+            ],
+            "strength": 0.75,
+            "required_elements": [
+                "case description",
+                "analysis",
+                "lessons learned"
+            ]
+        }
+    },
+    "evidence_patterns": {
+        "quantitative": {
+            "description": "Numerical evidence with statistical significance",
+            "indicators": [
+                "statistical significance",
+                "p-value",
+                "confidence interval",
+                "effect size",
+                "accuracy",
+                "F1 score",
+                "precision",
+                "recall"
+            ],
+            "strength": 1.0
+        },
+        "qualitative": {
+            "description": "Non-numerical evidence and observations",
+            "indicators": [
+                "observation",
+                "interview",
+                "thematic analysis",
+                "case example"
+            ],
+            "strength": 0.7
+        },
+        "formal_proof": {
+            "description": "Mathematical or logical proof",
+            "indicators": [
+                "QED",
+                "proof",
+                "lemma",
+                "corollary",
+                "theorem"
+            ],
+            "strength": 1.0
+        },
+        "comparative": {
+            "description": "Comparison with baselines or prior work",
+            "indicators": [
+                "baseline",
+                "state-of-the-art",
+                "SOTA",
+                "comparison",
+                "outperforms"
+            ],
+            "strength": 0.9
+        }
+    },
+    "novelty_indicators": {
+        "strong": {
+            "phrases": [
+                "first to",
+                "novel approach",
+                "new paradigm",
+                "fundamentally different",
+                "breakthrough"
+            ],
+            "weight": 1.0
+        },
+        "moderate": {
+            "phrases": [
+                "improve upon",
+                "extend",
+                "enhance",
+                "optimize",
+                "refine"
+            ],
+            "weight": 0.7
+        },
+        "incremental": {
+            "phrases": [
+                "slightly better",
+                "minor improvement",
+                "variant of",
+                "alternative to"
+            ],
+            "weight": 0.4
+        }
+    },
+    "quality_criteria": {
+        "clarity": {
+            "description": "Clear problem statement and objectives",
+            "weight": 0.2,
+            "check_for": [
+                "explicit research question",
+                "clear objectives",
+                "well-defined scope"
+            ]
+        },
+        "methodology_rigor": {
+            "description": "Sound and appropriate methodology",
+            "weight": 0.25,
+            "check_for": [
+                "appropriate method for question",
+                "reproducible",
+                "justified choices"
+            ]
+        },
+        "evidence_strength": {
+            "description": "Strong supporting evidence",
+            "weight": 0.25,
+            "check_for": [
+                "sufficient data",
+                "appropriate analysis",
+                "statistical rigor"
+            ]
+        },
+        "novelty": {
+            "description": "Original contribution",
+            "weight": 0.15,
+            "check_for": [
+                "clear contribution",
+                "differentiation from prior work",
+                "significance of contribution"
+            ]
+        },
+        "impact": {
+            "description": "Potential impact and relevance",
+            "weight": 0.15,
+            "check_for": [
+                "practical implications",
+                "broader relevance",
+                "future directions"
+            ]
+        }
+    }
+}
