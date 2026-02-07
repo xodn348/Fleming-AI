@@ -5,8 +5,9 @@ Manages continuous execution cycles with error recovery
 
 import asyncio
 import logging
+import random
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -56,13 +57,13 @@ class FlemingRunner:
         logger.info(f"Starting cycle at {cycle_start}")
 
         try:
-            # Step 1: Collect papers
-            logger.info("Step 1/5: Collecting papers from arXiv...")
-            await self._collect_papers()
+            # Step 1: Sample papers from VectorDB
+            logger.info("Step 1/5: Sampling papers from VectorDB...")
+            paper_ids = await self._sample_papers()
 
             # Step 2: Generate hypotheses
             logger.info("Step 2/5: Generating hypotheses...")
-            await self._generate_hypotheses()
+            await self._generate_hypotheses(paper_ids)
 
             # Step 3: Validate hypotheses
             logger.info("Step 3/5: Validating hypotheses...")
@@ -148,32 +149,164 @@ class FlemingRunner:
         await asyncio.sleep(0.1)  # Allow pending tasks to complete
         logger.info("Cleanup complete")
 
-    # Placeholder methods for each pipeline step
-    # These will be implemented with actual logic later
+    async def add_quality_paper(self, paper_path: str) -> bool:
+        """
+        Manually add a quality paper to VectorDB.
+        Called separately from main cycle, not during run_once().
+        """
+        from src.parsers.pdf_parser import PDFParser
+        from src.storage.vectordb import VectorDB
+
+        parser = PDFParser()
+        paper_data = parser.parse(paper_path)
+
+        if not paper_data:
+            logger.error(f"Failed to parse: {paper_path}")
+            return False
+
+        vectordb = VectorDB()
+        chunks_added = vectordb.add_papers([paper_data])
+        logger.info(f"Added {chunks_added} chunks from {paper_path}")
+        return True
+
+    async def run_collection_cycle(self) -> Dict[str, Any]:
+        """
+        Run paper collection cycle (separate from hypothesis generation).
+        Discovers new papers, enriches with citations, filters by quality, and stores.
+
+        Returns:
+            dict: Summary with discovered, enriched, filtered, stored counts
+        """
+        from src.collectors.paper_collector import PaperCollector
+
+        logger.info("=== Starting Paper Collection Cycle ===")
+        collector = PaperCollector()
+
+        # Step 1: Discover candidates
+        logger.info("Step 1/4: Discovering candidate papers...")
+        limit = 10 if self.test_mode else 50
+        candidates = await collector.discover(limit=limit)
+        logger.info(f"  Discovered {len(candidates)} candidate papers")
+
+        # Step 2: Enrich with citations
+        logger.info("Step 2/4: Enriching with citation data...")
+        enriched = await collector.enrich(candidates)
+        logger.info(f"  Enriched {len(enriched)} papers")
+
+        # Step 3: Filter by quality
+        logger.info("Step 3/4: Filtering by quality score...")
+        filtered = await collector.filter(enriched)
+        logger.info(f"  {len(filtered)} papers passed quality filter")
+
+        # Step 4: Store to database
+        logger.info("Step 4/4: Storing to database...")
+        stored_count = await collector.store(filtered)
+        logger.info(f"  Stored {stored_count} new papers")
+
+        summary = {
+            "discovered": len(candidates),
+            "enriched": len(enriched),
+            "filtered": len(filtered),
+            "stored": stored_count,
+        }
+
+        logger.info(f"=== Collection Cycle Complete: {summary} ===")
+        return summary
+
+    # Pipeline step methods
+
+    async def _sample_papers(self) -> list[str]:
+        """Sample papers from VectorDB for hypothesis exploration."""
+        from src.storage.vectordb import VectorDB
+
+        vectordb = VectorDB()
+        all_paper_ids = vectordb.get_all_paper_ids()
+
+        if len(all_paper_ids) < 2:
+            logger.warning(f"Need at least 2 papers in VectorDB, found {len(all_paper_ids)}")
+            return all_paper_ids
+
+        sample_size = (
+            min(5, len(all_paper_ids)) if not self.test_mode else min(3, len(all_paper_ids))
+        )
+        sampled = random.sample(all_paper_ids, sample_size)
+
+        logger.info(f"Sampled {len(sampled)} papers from {len(all_paper_ids)} available")
+        return sampled
 
     async def _collect_papers(self):
-        """Collect papers from arXiv"""
+        """Collect papers from multiple sources (arXiv, Semantic Scholar, OpenAlex)"""
         from src.collectors.arxiv_client import ArxivClient
+        from src.collectors.semantic_scholar_client import SemanticScholarClient
+        from src.collectors.openalex_client import OpenAlexClient
+        from src.storage.database import PaperDatabase
+        import httpx
 
         max_results = 3 if self.test_mode else 10
+        collected_papers = []
 
-        with ArxivClient() as client:
-            papers = client.search(
-                query="cat:cs.AI OR cat:cs.LG",
-                max_results=max_results,
-                sort_by="submittedDate",
-            )
-            logger.info(f"Collected {len(papers)} papers from arXiv")
-            return papers
+        # Try Source 1: arXiv
+        try:
+            with ArxivClient() as client:
+                papers = client.search(
+                    query="cat:cs.AI OR cat:cs.LG",
+                    max_results=max_results,
+                    sort_by="submittedDate",
+                )
+                collected_papers.extend(papers)
+                logger.info(f"✓ arXiv: {len(papers)} papers")
+        except Exception as e:
+            logger.warning(f"✗ arXiv failed: {str(e)[:50]}")
 
-    async def _generate_hypotheses(self):
-        """Generate hypotheses from collected papers"""
+        # Try Source 2: Semantic Scholar (if we need more)
+        if len(collected_papers) < max_results:
+            try:
+                client = SemanticScholarClient()
+                papers = await client.search(
+                    query="machine learning",
+                    limit=max_results - len(collected_papers),
+                )
+                collected_papers.extend(papers)
+                logger.info(f"✓ Semantic Scholar: {len(papers)} papers")
+                await client.close()
+            except Exception as e:
+                logger.warning(f"✗ Semantic Scholar failed: {str(e)[:50]}")
+
+        # Try Source 3: OpenAlex (if we still need more)
+        if len(collected_papers) < max_results:
+            try:
+                client = OpenAlexClient()
+                papers = await client.search(
+                    query="artificial intelligence",
+                    limit=max_results - len(collected_papers),
+                )
+                collected_papers.extend(papers)
+                logger.info(f"✓ OpenAlex: {len(papers)} papers")
+                await client.close()
+            except Exception as e:
+                logger.warning(f"✗ OpenAlex failed: {str(e)[:50]}")
+
+        # Fallback: Use existing papers from DB
+        if not collected_papers:
+            logger.warning("All sources failed, using existing papers from DB")
+            with PaperDatabase("data/db/papers.db") as db:
+                all_papers = db.get_all_papers()
+                collected_papers = all_papers[:max_results] if all_papers else []
+                logger.info(f"✓ Local DB: {len(collected_papers)} papers")
+
+        logger.info(f"Total collected: {len(collected_papers)} papers from all sources")
+        return collected_papers
+
+    async def _generate_hypotheses(self, paper_ids: Optional[list[str]] = None):
+        """Generate hypotheses from sampled papers."""
         from src.llm.ollama_client import OllamaClient
+        from src.llm.advanced_llm import AdvancedLLM
         from src.generators.hypothesis import HypothesisGenerator
         from src.storage.vectordb import VectorDB
+        from src.storage.hypothesis_db import HypothesisDatabase
         from src.filters.quality import QualityFilter
 
-        async with OllamaClient() as ollama:
+        async with OllamaClient() as ollama, AdvancedLLM() as advanced_llm:
             vectordb = VectorDB()
             quality_filter = QualityFilter()
 
@@ -181,13 +314,26 @@ class FlemingRunner:
                 ollama_client=ollama,
                 vectordb=vectordb,
                 quality_filter=quality_filter,
+                advanced_llm=advanced_llm,
             )
 
-            query = "machine learning" if self.test_mode else "artificial intelligence"
-            k = 3 if self.test_mode else 10
+            if paper_ids:
+                hypotheses = await generator.generate_from_papers(paper_ids)
+            else:
+                sampled = await self._sample_papers()
+                hypotheses = await generator.generate_from_papers(sampled)
 
-            hypotheses = await generator.generate_hypotheses(query=query, k=k)
-            logger.info(f"Generated {len(hypotheses)} hypotheses")
+            # Store hypotheses in database
+            with HypothesisDatabase() as db:
+                stored_count = 0
+                for hyp in hypotheses:
+                    if db.insert_hypothesis(hyp):
+                        stored_count += 1
+                logger.info(f"Stored {stored_count}/{len(hypotheses)} hypotheses in database")
+
+            logger.info(
+                f"Generated {len(hypotheses)} hypotheses from {len(paper_ids or [])} papers"
+            )
             return hypotheses
 
     async def _validate_hypotheses(self):

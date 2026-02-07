@@ -68,11 +68,12 @@ class VectorDB:
         paper_id = paper_data.get("paper_id", "unknown")
         title = paper_data.get("title", "")
 
-        # Add title + abstract as first chunk
+        # Add title + abstract as first chunk (truncate if too long)
         if paper_data.get("abstract"):
+            abstract = paper_data["abstract"][:250]  # Limit abstract to 250 chars
             chunks.append(
                 {
-                    "text": f"{title}\n\n{paper_data['abstract']}",
+                    "text": f"{title}\n\n{abstract}",
                     "metadata": {
                         "paper_id": paper_id,
                         "section": "abstract",
@@ -85,14 +86,14 @@ class VectorDB:
         sections = ["introduction", "method", "results", "conclusion"]
         for section in sections:
             if paper_data.get(section):
-                # Split long sections into smaller chunks (max 1000 chars)
+                # Split long sections into smaller chunks (max 300 chars)
                 section_text = paper_data[section]
-                if len(section_text) > 1000:
+                if len(section_text) > 300:
                     # Split by paragraphs or sentences
                     parts = section_text.split("\n\n")
                     current_chunk = ""
                     for part in parts:
-                        if len(current_chunk) + len(part) < 1000:
+                        if len(current_chunk) + len(part) < 300:
                             current_chunk += part + "\n\n"
                         else:
                             if current_chunk:
@@ -199,14 +200,16 @@ class VectorDB:
 
         # Format results
         matches = []
-        if results["ids"] and results["ids"][0]:
+        if results.get("ids") and results["ids"] and results["ids"][0]:
             for i in range(len(results["ids"][0])):
                 matches.append(
                     {
                         "id": results["ids"][0][i],
-                        "text": results["documents"][0][i],
-                        "metadata": results["metadatas"][0][i],
-                        "distance": results["distances"][0][i] if "distances" in results else None,
+                        "text": results["documents"][0][i] if results.get("documents") else "",
+                        "metadata": results["metadatas"][0][i] if results.get("metadatas") else {},
+                        "distance": results["distances"][0][i]
+                        if results.get("distances")
+                        else None,
                     }
                 )
 
@@ -226,17 +229,40 @@ class VectorDB:
             where={"paper_id": paper_id},
         )
 
-        return {
-            "paper_id": paper_id,
-            "chunks": [
+        chunks = []
+        if results and results.get("ids"):
+            chunks = [
                 {
                     "id": results["ids"][i],
-                    "text": results["documents"][i],
-                    "metadata": results["metadatas"][i],
+                    "text": results["documents"][i] if results.get("documents") else "",
+                    "metadata": results["metadatas"][i] if results.get("metadatas") else {},
                 }
                 for i in range(len(results["ids"]))
-            ],
+            ]
+
+        return {
+            "paper_id": paper_id,
+            "chunks": chunks,
         }
+
+    def get_all_paper_ids(self) -> list[str]:
+        """
+        Get all unique paper IDs in the database.
+
+        Returns:
+            List of unique paper IDs
+        """
+        results = self.collection.get()
+        paper_ids = set()
+
+        if results and results.get("metadatas"):
+            metadatas = results.get("metadatas", [])
+            if metadatas:
+                for metadata in metadatas:
+                    if metadata and "paper_id" in metadata:
+                        paper_ids.add(metadata["paper_id"])
+
+        return list(paper_ids)
 
     def count(self) -> int:
         """Get total number of chunks in the database."""

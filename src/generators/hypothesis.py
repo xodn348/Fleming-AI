@@ -87,16 +87,20 @@ class HypothesisGenerator:
         ollama_client: Any,
         vectordb: Any,
         quality_filter: Any,
+        advanced_llm: Optional[Any] = None,
     ):
         """
         Initialize HypothesisGenerator with dependencies.
 
         Args:
-            ollama_client: OllamaClient for LLM inference
+            ollama_client: OllamaClient for concept extraction (lightweight)
             vectordb: VectorDB for paper retrieval
             quality_filter: QualityFilter for scoring hypotheses
+            advanced_llm: AdvancedLLM for hypothesis generation (Claude/KIMI)
+                         Falls back to ollama_client if not provided
         """
         self.ollama = ollama_client
+        self.advanced_llm = advanced_llm if advanced_llm else ollama_client
         self.vectordb = vectordb
         self.quality_filter = quality_filter
 
@@ -282,7 +286,7 @@ Return JSON format:
 {{"hypothesis": "...", "confidence": 0.X, "reasoning": "..."}}"""
 
         try:
-            response = await self.ollama.generate(
+            response = await self.advanced_llm.generate(
                 prompt=prompt,
                 temperature=0.5,
                 max_tokens=800,

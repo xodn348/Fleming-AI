@@ -1,0 +1,21 @@
+[Unit]
+Description=Fleming-AI Paper Collection Scheduler
+After=network.target
+
+[Service]
+Type=simple
+User=jnnj92
+WorkingDirectory=/Users/jnnj92/Fleming-AI
+ExecStart=/usr/bin/python3 /Users/jnnj92/Fleming-AI/scripts/schedule_collection.py --frequency weekly
+Restart=on-failure
+RestartSec=300
+StandardOutput=journal
+StandardError=journal
+
+# Graceful shutdown
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target
