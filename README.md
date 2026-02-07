@@ -40,6 +40,7 @@ Fleming-AI/
 ### Prerequisites
 - Python 3.10 or higher
 - uv (recommended) or pip
+- Ollama (for LLM inference)
 
 ### Setup
 
@@ -53,6 +54,14 @@ uv sync
 
 # Or using pip
 pip install -e .
+
+# Install and start Ollama (if not already installed)
+# macOS/Linux:
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull required models
+ollama pull qwen2.5:7b
+ollama pull nomic-embed-text
 ```
 
 ## Development
@@ -95,19 +104,117 @@ LOG_LEVEL=INFO
 
 ## Usage
 
+### Running Fleming-AI
+
+**Continuous Mode** (runs forever with automatic cycles):
+```bash
+python main.py
+```
+
+**Test Mode** (single short cycle for testing):
+```bash
+python main.py --test
+```
+
+**Custom Configuration**:
+```bash
+# Run with custom cycle delay (in seconds)
+python main.py --cycle-delay 7200
+
+# Run with custom retry settings
+python main.py --max-retries 5
+```
+
+### Command Line Options
+
+- `--test`: Run in test mode (single cycle with minimal data)
+- `--cycle-delay SECONDS`: Time between cycles (default: 3600)
+- `--max-retries N`: Maximum retry attempts on failure (default: 3)
+
+### Pipeline Stages
+
+Fleming-AI runs through 5 stages in each cycle:
+
+1. **Paper Collection**: Fetches recent papers from arXiv
+2. **Hypothesis Generation**: Uses LLM to generate hypotheses from papers
+3. **Validation**: Validates hypotheses using computational methods
+4. **Storage**: Stores results in SQLite database
+5. **Synchronization**: Syncs data (placeholder for cloud backup)
+
+### Programmatic Usage
+
 ```python
-from src.collectors import PaperCollector
-from src.filters import PaperFilter
+from src.scheduler.runner import FlemingRunner
+import asyncio
 
-# Initialize collector
-collector = PaperCollector()
+async def main():
+    runner = FlemingRunner(
+        cycle_delay=3600,
+        max_retries=3,
+        test_mode=False,
+    )
+    
+    # Run single cycle
+    success = await runner.run_once()
+    
+    # Or run continuously
+    await runner.run_forever()
+    
+    # Cleanup
+    await runner.cleanup()
 
-# Collect papers
-papers = collector.collect()
+asyncio.run(main())
+```
 
-# Filter papers
-filter = PaperFilter()
-filtered = filter.apply(papers)
+### Component Usage
+
+**Collect Papers from arXiv**:
+```python
+from src.collectors.arxiv_client import ArxivClient
+
+with ArxivClient() as client:
+    papers = client.search(
+        query="cat:cs.AI",
+        max_results=10,
+    )
+```
+
+**Generate Hypotheses**:
+```python
+from src.llm.ollama_client import OllamaClient
+from src.generators.hypothesis import HypothesisGenerator
+from src.storage.vectordb import VectorDB
+from src.filters.quality import QualityFilter
+
+async with OllamaClient() as ollama:
+    vectordb = VectorDB()
+    quality_filter = QualityFilter()
+    
+    generator = HypothesisGenerator(
+        ollama_client=ollama,
+        vectordb=vectordb,
+        quality_filter=quality_filter,
+    )
+    
+    hypotheses = await generator.generate_hypotheses(
+        query="machine learning",
+        k=10,
+    )
+```
+
+**Validate Hypotheses**:
+```python
+from src.validators.pipeline import ValidationPipeline
+from src.storage.hypothesis_db import HypothesisDatabase
+
+async with OllamaClient() as ollama:
+    with HypothesisDatabase() as db:
+        pipeline = ValidationPipeline(
+            ollama_client=ollama,
+            hypothesis_db=db,
+        )
+        
+        result = await pipeline.validate(hypothesis)
 ```
 
 ## Contributing

@@ -4,6 +4,7 @@ Fleming-AI Main Entry Point
 Continuous execution loop for automated hypothesis generation and validation
 """
 
+import argparse
 import asyncio
 import logging
 import signal
@@ -38,16 +39,54 @@ def setup_signal_handlers(runner: FlemingRunner):
 
 async def main():
     """Main entry point for Fleming-AI"""
+    parser = argparse.ArgumentParser(description="Fleming-AI - Automated Research Discovery")
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        help="Run in test mode (single short cycle)",
+    )
+    parser.add_argument(
+        "--cycle-delay",
+        type=int,
+        default=3600,
+        help="Seconds between cycles (default: 3600)",
+    )
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=3,
+        help="Maximum retry attempts on failure (default: 3)",
+    )
+    args = parser.parse_args()
+
     logger.info("=" * 80)
     logger.info("Fleming-AI Starting")
+    if args.test:
+        logger.info("Running in TEST MODE")
     logger.info("=" * 80)
 
-    runner = FlemingRunner()
+    # Initialize runner with configuration
+    runner = FlemingRunner(
+        cycle_delay=args.cycle_delay,
+        max_retries=args.max_retries,
+        test_mode=args.test,
+    )
     setup_signal_handlers(runner)
 
     try:
-        # Run forever with automatic error recovery
-        await runner.run_forever()
+        if args.test:
+            # Run single cycle in test mode
+            logger.info("Running single test cycle...")
+            success = await runner.run_once()
+            if success:
+                logger.info("Test cycle completed successfully")
+                sys.exit(0)
+            else:
+                logger.error("Test cycle failed")
+                sys.exit(1)
+        else:
+            # Run forever with automatic error recovery
+            await runner.run_forever()
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received")
     except Exception as e:

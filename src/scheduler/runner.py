@@ -27,6 +27,7 @@ class FlemingRunner:
         cycle_delay: int = 3600,  # 1 hour between cycles
         max_retries: int = 3,
         retry_delay: int = 60,
+        test_mode: bool = False,
     ):
         """
         Initialize Fleming runner
@@ -35,10 +36,12 @@ class FlemingRunner:
             cycle_delay: Seconds to wait between successful cycles
             max_retries: Maximum retry attempts on failure
             retry_delay: Seconds to wait before retry
+            test_mode: If True, use minimal data for quick testing
         """
         self.cycle_delay = cycle_delay
         self.max_retries = max_retries
         self.retry_delay = retry_delay
+        self.test_mode = test_mode
         self._running = False
         self._shutdown_event = asyncio.Event()
 
@@ -150,45 +153,95 @@ class FlemingRunner:
 
     async def _collect_papers(self):
         """Collect papers from arXiv"""
-        # TODO: Implement with ArxivClient
-        # - Search for recent papers in relevant categories
-        # - Filter based on criteria
-        # - Store metadata
-        await asyncio.sleep(1)  # Placeholder
-        logger.debug("Papers collected (placeholder)")
+        from src.collectors.arxiv_client import ArxivClient
+
+        max_results = 3 if self.test_mode else 10
+
+        with ArxivClient() as client:
+            papers = client.search(
+                query="cat:cs.AI OR cat:cs.LG",
+                max_results=max_results,
+                sort_by="submittedDate",
+            )
+            logger.info(f"Collected {len(papers)} papers from arXiv")
+            return papers
 
     async def _generate_hypotheses(self):
         """Generate hypotheses from collected papers"""
-        # TODO: Implement with OllamaClient
-        # - Load paper abstracts
-        # - Generate hypotheses using LLM
-        # - Extract structured hypothesis data
-        await asyncio.sleep(1)  # Placeholder
-        logger.debug("Hypotheses generated (placeholder)")
+        from src.llm.ollama_client import OllamaClient
+        from src.generators.hypothesis import HypothesisGenerator
+        from src.storage.vectordb import VectorDB
+        from src.filters.quality import QualityFilter
+
+        async with OllamaClient() as ollama:
+            vectordb = VectorDB()
+            quality_filter = QualityFilter()
+
+            generator = HypothesisGenerator(
+                ollama_client=ollama,
+                vectordb=vectordb,
+                quality_filter=quality_filter,
+            )
+
+            query = "machine learning" if self.test_mode else "artificial intelligence"
+            k = 3 if self.test_mode else 10
+
+            hypotheses = await generator.generate_hypotheses(query=query, k=k)
+            logger.info(f"Generated {len(hypotheses)} hypotheses")
+            return hypotheses
 
     async def _validate_hypotheses(self):
         """Validate generated hypotheses"""
-        # TODO: Implement validation logic
-        # - Check hypothesis quality
-        # - Verify novelty
-        # - Score feasibility
-        await asyncio.sleep(1)  # Placeholder
-        logger.debug("Hypotheses validated (placeholder)")
+        from src.llm.ollama_client import OllamaClient
+        from src.storage.hypothesis_db import HypothesisDatabase
+        from src.validators.pipeline import ValidationPipeline
+
+        async with OllamaClient() as ollama:
+            with HypothesisDatabase() as db:
+                pipeline = ValidationPipeline(
+                    ollama_client=ollama,
+                    hypothesis_db=db,
+                    sandbox_enabled=not self.test_mode,
+                )
+
+                pending = db.get_hypotheses_by_status("pending", limit=3 if self.test_mode else 10)
+
+                if not pending:
+                    logger.info("No pending hypotheses to validate")
+                    return []
+
+                results = await pipeline.validate_batch(pending)
+                stats = pipeline.get_validation_stats(results)
+                logger.info(f"Validated {len(results)} hypotheses: {stats}")
+                return results
 
     async def _store_results(self):
         """Store results to database"""
-        # TODO: Implement storage logic
-        # - Save papers to database
-        # - Save hypotheses with metadata
-        # - Update statistics
-        await asyncio.sleep(1)  # Placeholder
-        logger.debug("Results stored (placeholder)")
+        from src.storage.hypothesis_db import HypothesisDatabase
+
+        with HypothesisDatabase() as db:
+            total = db.count_hypotheses()
+            pending = db.count_hypotheses("pending")
+            validated = db.count_hypotheses("validated")
+            rejected = db.count_hypotheses("rejected")
+
+            logger.info(
+                f"Database stats - Total: {total}, "
+                f"Pending: {pending}, Validated: {validated}, Rejected: {rejected}"
+            )
+
+            return {
+                "total": total,
+                "pending": pending,
+                "validated": validated,
+                "rejected": rejected,
+            }
 
     async def _sync_data(self):
         """Synchronize data with external systems"""
-        # TODO: Implement sync logic
-        # - Backup to cloud storage
-        # - Export reports
-        # - Update dashboards
-        await asyncio.sleep(1)  # Placeholder
-        logger.debug("Data synchronized (placeholder)")
+        if self.test_mode:
+            logger.info("Skipping sync in test mode")
+            return
+
+        logger.info("Data sync placeholder - implement cloud backup/export as needed")
+        await asyncio.sleep(0.1)
