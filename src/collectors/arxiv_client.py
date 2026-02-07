@@ -13,12 +13,12 @@ import httpx
 class ArxivClient:
     """Client for interacting with the arXiv API."""
 
-    BASE_URL = "http://export.arxiv.org/api/query"
+    BASE_URL = "https://export.arxiv.org/api/query"
     RATE_LIMIT_DELAY = 3  # seconds
 
     def __init__(self):
         """Initialize the ArXiv client."""
-        self.client = httpx.Client(timeout=30.0)
+        self.client = httpx.Client(timeout=30.0, follow_redirects=True)
         self._last_request_time = 0
 
     def _rate_limit(self):
