@@ -100,7 +100,34 @@ Create a `.env` file in the project root:
 # Example configuration
 DEBUG=True
 LOG_LEVEL=INFO
+
+# Optional: TAMU Library Access (for subscription journals)
+# Enables downloading papers from subscription-based journals (Nature, Science, etc.)
+# via TAMU's EZProxy service
+TAMU_NETID=your_netid
+TAMU_PASSWORD=your_password
 ```
+
+### TAMU Library Proxy Setup
+
+To access subscription-based papers (Nature, Science, etc.), configure TAMU credentials:
+
+1. **Get your TAMU NetID and password** from your TAMU account
+2. **Add to `.env` file**:
+   ```env
+   TAMU_NETID=your_netid
+   TAMU_PASSWORD=your_password
+   ```
+3. **How it works**:
+   - When downloading papers via DOI, the system checks for TAMU credentials
+   - If available, it authenticates with TAMU's EZProxy service
+   - DOI URLs are transformed to proxy URLs for authenticated access
+   - If proxy fails, falls back to direct download (works for open access papers)
+
+**Note**: TAMU credentials are optional. Without them, the system will still download:
+- All arXiv papers (open access)
+- Papers available through direct DOI access
+- Papers from other open access sources
 
 ## Usage
 
