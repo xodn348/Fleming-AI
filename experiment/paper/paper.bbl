@@ -1,0 +1,78 @@
+\begin{thebibliography}{9}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Authors(2023)]{battle_backbones2023}
+Multiple Authors.
+\newblock Battle of the backbones: A large-scale comparison of pretrained
+  models across computer vision tasks.
+\newblock \emph{arXiv preprint arXiv:2310.19909}, 2023.
+\newblock URL \url{https://arxiv.org/abs/2310.19909}.
+
+\bibitem[Caron et~al.(2021)Caron, Touvron, Misra, J{\'e}gou, Mairal,
+  Bojanowski, and Joulin]{caron2021dino}
+Mathilde Caron, Hugo Touvron, Ishan Misra, Herv{\'e} J{\'e}gou, Julien Mairal,
+  Piotr Bojanowski, and Armand Joulin.
+\newblock Emerging properties in self-supervised vision transformers.
+\newblock \emph{arXiv preprint arXiv:2104.14294}, 2021.
+\newblock URL \url{https://arxiv.org/abs/2104.14294}.
+
+\bibitem[Chen et~al.(2020)Chen, Kornblith, Norouzi, and Hinton]{chen2020simclr}
+Ting Chen, Simon Kornblith, Mohammad Norouzi, and Geoffrey Hinton.
+\newblock A simple framework for contrastive learning of visual
+  representations.
+\newblock 2020.
+\newblock URL \url{https://arxiv.org/abs/2002.05709}.
+
+\bibitem[Chen et~al.(2021)Chen, Xie, and He]{chen2021mocov3}
+Xinlei Chen, Saining Xie, and Kaiming He.
+\newblock An empirical study of training self-supervised vision transformers.
+\newblock In \emph{International Conference on Computer Vision (ICCV)}.
+  Facebook AI Research (FAIR), 2021.
+\newblock URL \url{https://arxiv.org/abs/2104.02057}.
+
+\bibitem[Dosovitskiy et~al.(2021)Dosovitskiy, Beyer, Kolesnikov, Weissenborn,
+  Zhai, Unterthiner, Dehghani, Minderer, Heigold, Gelly, Uszkoreit, and
+  Houlsby]{dosovitskiy2021vit}
+Alexey Dosovitskiy, Lucas Beyer, Alexander Kolesnikov, Dirk Weissenborn,
+  Xiaohua Zhai, Thomas Unterthiner, Mostafa Dehghani, Matthias Minderer, Georg
+  Heigold, Sylvain Gelly, Jakob Uszkoreit, and Neil Houlsby.
+\newblock An image is worth 16x16 words: Transformers for image recognition at
+  scale.
+\newblock In \emph{International Conference on Learning Representations
+  (ICLR)}. Google Research, Brain Team, 2021.
+\newblock URL \url{https://arxiv.org/abs/2010.11929}.
+
+\bibitem[He et~al.(2020)He, Fan, Wu, Xie, and Girshick]{he2020moco}
+Kaiming He, Haoqi Fan, Yuxin Wu, Saining Xie, and Ross Girshick.
+\newblock Momentum contrast for unsupervised visual representation learning.
+\newblock 2020.
+\newblock URL \url{https://arxiv.org/abs/1911.05722}.
+
+\bibitem[He et~al.(2022)He, Chen, Xie, Li, Doll{\'a}r, and Girshick]{he2022mae}
+Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li, Piotr Doll{\'a}r, and Ross
+  Girshick.
+\newblock Masked autoencoders are scalable vision learners.
+\newblock 2022.
+\newblock URL \url{https://arxiv.org/abs/2111.06377}.
+
+\bibitem[Smith et~al.(2023)Smith, Brock, Berrada, and De]{smith2023convnets}
+Samuel~L. Smith, Andrew Brock, Leonard Berrada, and Soham De.
+\newblock Convnets match vision transformers at scale.
+\newblock \emph{arXiv preprint arXiv:2310.16764}, 2023.
+\newblock URL \url{https://arxiv.org/abs/2310.16764}.
+
+\bibitem[Touvron et~al.(2021)Touvron, Cord, Douze, Massa, Sablayrolles, and
+  J{\'e}gou]{touvron2021deit}
+Hugo Touvron, Matthieu Cord, Matthijs Douze, Francisco Massa, Alexandre
+  Sablayrolles, and Herv{\'e} J{\'e}gou.
+\newblock Training data-efficient image transformers \& distillation through
+  attention.
+\newblock In \emph{International Conference on Machine Learning (ICML)}, pages
+  10347--10357. PMLR, 2021.
+\newblock URL \url{https://arxiv.org/abs/2012.12877}.
+
+\end{thebibliography}
