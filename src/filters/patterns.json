@@ -254,5 +254,127 @@
                 "future directions"
             ]
         }
+    },
+    "review_patterns": {
+        "MISSING_BASELINE": {
+            "description": "Hypothesis lacks comparison with baseline or prior work",
+            "indicators": [
+                "no baseline mentioned",
+                "no prior work comparison",
+                "no control group",
+                "no state-of-the-art comparison"
+            ],
+            "severity": "high"
+        },
+        "NO_ABLATION": {
+            "description": "No ablation study to validate component importance",
+            "indicators": [
+                "no ablation study",
+                "no component analysis",
+                "no feature importance",
+                "all components tested together"
+            ],
+            "severity": "high"
+        },
+        "NO_SANITY_CHECK": {
+            "description": "Missing sanity checks or validation of basic assumptions",
+            "indicators": [
+                "no sanity check",
+                "no validation of assumptions",
+                "no basic tests",
+                "untested assumptions"
+            ],
+            "severity": "high"
+        },
+        "NO_CONTROL": {
+            "description": "Lack of proper control conditions in experiments",
+            "indicators": [
+                "no control condition",
+                "no control group",
+                "uncontrolled variables",
+                "confounding factors"
+            ],
+            "severity": "high"
+        },
+        "CLAIM_EVIDENCE_MISMATCH": {
+            "description": "Claims not adequately supported by presented evidence",
+            "indicators": [
+                "unsupported claim",
+                "weak evidence",
+                "claim exceeds evidence",
+                "overgeneralization"
+            ],
+            "severity": "high"
+        },
+        "CHERRY_PICKED_METRICS": {
+            "description": "Selective reporting of favorable metrics while omitting unfavorable ones",
+            "indicators": [
+                "cherry picked",
+                "selective metrics",
+                "missing negative results",
+                "only positive results shown"
+            ],
+            "severity": "high"
+        },
+        "NO_NEGATIVE_RESULTS": {
+            "description": "Absence of negative results or failure cases",
+            "indicators": [
+                "no negative results",
+                "no failure cases",
+                "no limitations discussed",
+                "all results positive"
+            ],
+            "severity": "medium"
+        },
+        "OVERCLAIMING": {
+            "description": "Claims that overstate the significance or generalizability of findings",
+            "indicators": [
+                "overclaim",
+                "overgeneralize",
+                "too broad claim",
+                "exaggerated significance"
+            ],
+            "severity": "medium"
+        },
+        "AMBIGUOUS_DEFINITIONS": {
+            "description": "Key terms or concepts not clearly defined",
+            "indicators": [
+                "undefined term",
+                "ambiguous definition",
+                "unclear concept",
+                "vague terminology"
+            ],
+            "severity": "medium"
+        },
+        "NO_LIMITATIONS": {
+            "description": "Failure to discuss limitations of the work",
+            "indicators": [
+                "no limitations",
+                "no limitations discussed",
+                "no scope limitations",
+                "no methodological limitations"
+            ],
+            "severity": "medium"
+        },
+        "MISSING_SEEDS": {
+            "description": "Experiments not run with multiple random seeds for reproducibility",
+            "indicators": [
+                "no random seed",
+                "single seed",
+                "no seed variation",
+                "no seed reported"
+            ],
+            "severity": "medium"
+        },
+        "MISSING_HYPERPARAMS": {
+            "description": "Hyperparameters not fully specified or justified",
+            "indicators": [
+                "hyperparameters not specified",
+                "missing hyperparameter details",
+                "no hyperparameter justification",
+                "hyperparameter selection unclear"
+            ],
+            "severity": "medium"
+        }
     }
 }

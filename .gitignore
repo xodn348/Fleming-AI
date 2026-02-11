@@ -137,3 +137,5 @@ Thumbs.db
 data/papers/
 data/db/
 data/output/
+.sisyphus/
+runs/
