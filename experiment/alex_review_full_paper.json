@@ -1,0 +1,35 @@
+{
+  "review_id": "review_b88a2c48",
+  "verdict": "RESTART_STAGE",
+  "strengths": [
+    "Rigorous Experimental Design and Statistical Analysis: The 2x2 factorial design, 120 experiments, meticulous statistical analysis (two-way ANOVA, Cohen's d, assumption checks), and clear distinction between statistical and practical significance are exemplary. This is a model for robust empirical work.",
+    "Directly Challenges a Common Narrative: The paper directly addresses and provides strong empirical evidence against the widely held belief that Vision Transformers disproportionately benefit from pre-training compared to CNNs, offering a more nuanced and evidence-based understanding.",
+    "Comprehensive and Honest Reporting: The paper is well-structured, provides extensive details on methodology and experimental setup, and includes a thorough and honest discussion of limitations and future work, which significantly enhances its credibility and scientific value."
+  ],
+  "weaknesses": [
+    "Reproducibility Blocked by Placeholder URL: Despite providing a URL for code and experimental configurations, the explicit note that it is a 'placeholder URL for reproducibility' means the actual artifact is not available for review. This is a critical flaw that prevents independent verification of the results.",
+    "Limited Scope of Pre-training Paradigms: The study exclusively uses ImageNet-1k supervised pre-training. While this provides a controlled comparison, it limits the generalizability of the findings to modern deep learning practices which heavily rely on self-supervised pre-training (e.g., MoCo, DINO, MAE) or larger datasets (e.g., ImageNet-21k, JFT-300M). The 'architecture-agnostic' conclusion might not hold under these alternative pre-training schemes.",
+    "Potential Influence of ImageNet-Downstream Overlap: The paper acknowledges that three of the five downstream datasets (Flowers102, Oxford Pets, STL-10) contain object categories present in ImageNet-1k. While this overlap affects both architectures equally within this study, it may inflate transfer performance and could limit the generalizability of the 'architecture-agnostic' claim to truly novel or out-of-distribution domains where such semantic overlap is minimal or absent."
+  ],
+  "questions": [
+    "Could the authors clarify the exact status of the code and data? Is it available in a private repository for reviewers, or will it only be made public upon acceptance? Providing a functional, anonymized link for review would significantly improve the paper's standing.",
+    "Given the explicit acknowledgment of ImageNet-downstream overlap, have the authors considered any methods to quantify or mitigate this effect, perhaps by analyzing performance specifically on the non-overlapping datasets (CIFAR-10, CIFAR-100) and discussing those results separately?"
+  ],
+  "suggestions": [
+    "Release the full code, including all experimental scripts, trained models (if feasible), and data preprocessing pipelines, to a public repository. Ensure the provided URL is active and functional for review.",
+    "Expand the 'Related Work' section to more explicitly discuss how prior comparative studies between CNNs and Transformers might have implicitly conflated the 'from scratch' and 'pre-training benefit' questions, and how this paper specifically disentangles them.",
+    "For future work, consider investigating the impact of different data augmentation strategies during fine-tuning. While standard ImageNet statistics are used, architecture-specific augmentation choices (e.g., RandAugment for ViTs) might subtly influence transfer performance and could reveal latent interaction effects."
+  ],
+  "scores": {
+    "structure": 0.9,
+    "novelty": 0.8,
+    "baselines": 1.0,
+    "statistical_rigor": 1.0,
+    "claim_evidence_match": 1.0,
+    "overclaiming": 1.0,
+    "limitations": 1.0,
+    "related_work": 0.9,
+    "reproducibility": 0.4
+  },
+  "timestamp": "2026-02-10T22:33:41.917113"
+}
