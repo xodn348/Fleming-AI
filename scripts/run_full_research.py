@@ -39,6 +39,13 @@ from typing import Any
 import torch
 from torch.utils.data import DataLoader
 
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
 # Add project root to import path.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -429,7 +436,7 @@ class FullResearchPipeline:
         self.logger.info("Environment validation passed")
         self.logger.info("MPS available: %s", status["mps_available"])
         self.logger.info("VectorDB chunks: %d", chunk_count)
-        self.logger.info("LLM backends: %s", backend_status)
+        self.logger.info("LLM backends: %s", status["llm_backends"])
 
         return status
 
