@@ -40,10 +40,9 @@ class ClaudeClient:
             )
 
         self.model = model
-        self.timeout = timeout
+        self._timeout = timeout
         self.base_url = "https://claude.ai/api"
         self.org_id = None
-        self.client = httpx.AsyncClient(timeout=timeout)
 
         logger.info("ClaudeClient initialized with session key authentication")
 
@@ -56,22 +55,23 @@ class ClaudeClient:
         await self.close()
 
     async def close(self):
-        """Close the client"""
-        await self.client.aclose()
+        """Close the client (no-op - we use context managers)"""
+        pass  # httpx clients are created per-request
 
     async def _get_organization_id(self) -> str:
         """Get organization ID from Claude.ai API"""
         try:
             headers = self._get_headers()
-            response = await self.client.get(
-                f"{self.base_url}/organizations",
-                headers=headers,
-            )
-            response.raise_for_status()
-            data = response.json()
-            org_id = data[0]["uuid"]
-            logger.debug(f"Got organization ID: {org_id}")
-            return org_id
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                response = await client.get(
+                    f"{self.base_url}/organizations",
+                    headers=headers,
+                )
+                response.raise_for_status()
+                data = response.json()
+                org_id = data[0]["uuid"]
+                logger.debug(f"Got organization ID: {org_id}")
+                return org_id
         except Exception as e:
             logger.error(f"Failed to get organization ID: {e}")
             if "401" in str(e) or "Unauthorized" in str(e):
@@ -86,16 +86,17 @@ class ClaudeClient:
                 "uuid": str(uuid.uuid4()),
                 "name": "Fleming-AI",
             }
-            response = await self.client.post(
-                f"{self.base_url}/organizations/{self.org_id}/chat_conversations",
-                headers=headers,
-                json=payload,
-            )
-            response.raise_for_status()
-            data = response.json()
-            conv_id = data["uuid"]
-            logger.debug(f"Created conversation: {conv_id}")
-            return conv_id
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                response = await client.post(
+                    f"{self.base_url}/organizations/{self.org_id}/chat_conversations",
+                    headers=headers,
+                    json=payload,
+                )
+                response.raise_for_status()
+                data = response.json()
+                conv_id = data["uuid"]
+                logger.debug(f"Created conversation: {conv_id}")
+                return conv_id
         except Exception as e:
             logger.error(f"Failed to create conversation: {e}")
             raise
@@ -118,27 +119,28 @@ class ClaudeClient:
             if system:
                 payload["system"] = system
 
-            response = await self.client.post(
-                f"{self.base_url}/organizations/{self.org_id}/chat_conversations/{conv_id}/completion",
-                headers=headers,
-                json=payload,
-                timeout=self.timeout * 2,  # Longer timeout for completion
-            )
-            response.raise_for_status()
+            async with httpx.AsyncClient(timeout=self._timeout * 2) as client:
+                response = await client.post(
+                    f"{self.base_url}/organizations/{self.org_id}/chat_conversations/{conv_id}/completion",
+                    headers=headers,
+                    json=payload,
+                    timeout=self._timeout * 2,
+                )
+                response.raise_for_status()
 
-            # Parse streaming response
-            full_response = ""
-            for line in response.text.split("\n"):
-                if line.startswith("data: "):
-                    try:
-                        data = json.loads(line[6:])
-                        if "completion" in data:
-                            full_response += data["completion"]
-                    except json.JSONDecodeError:
-                        continue
+                # Parse streaming response
+                full_response = ""
+                for line in response.text.split("\n"):
+                    if line.startswith("data: "):
+                        try:
+                            data = json.loads(line[6:])
+                            if "completion" in data:
+                                full_response += data["completion"]
+                        except json.JSONDecodeError:
+                            continue
 
-            logger.debug(f"Got response ({len(full_response)} chars)")
-            return full_response
+                logger.debug(f"Got response ({len(full_response)} chars)")
+                return full_response
 
         except Exception as e:
             logger.error(f"Failed to send message: {e}")
@@ -150,10 +152,11 @@ class ClaudeClient:
         """Delete conversation (cleanup)"""
         try:
             headers = self._get_headers()
-            await self.client.delete(
-                f"{self.base_url}/organizations/{self.org_id}/chat_conversations/{conv_id}",
-                headers=headers,
-            )
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                await client.delete(
+                    f"{self.base_url}/organizations/{self.org_id}/chat_conversations/{conv_id}",
+                    headers=headers,
+                )
             logger.debug(f"Deleted conversation: {conv_id}")
         except Exception as e:
             logger.warning(f"Failed to delete conversation: {e}")
