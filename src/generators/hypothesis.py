@@ -3,6 +3,7 @@ Hypothesis Generator for Fleming-AI
 Literature-Based Discovery using Don Swanson's ABC Model
 """
 
+import asyncio
 import json
 import logging
 import uuid
@@ -10,7 +11,12 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Optional
 
+from src.pipeline.capabilities import CAPABILITIES
+from src.pipeline.hypothesis_spec import HypothesisSpec
+
 logger = logging.getLogger(__name__)
+
+MAX_PATTERNS = 50
 
 
 @dataclass
@@ -84,23 +90,19 @@ class HypothesisGenerator:
 
     def __init__(
         self,
-        ollama_client: Any,
+        llm_client: Any,
         vectordb: Any,
         quality_filter: Any,
-        advanced_llm: Optional[Any] = None,
     ):
         """
         Initialize HypothesisGenerator with dependencies.
 
         Args:
-            ollama_client: OllamaClient for concept extraction (lightweight)
+            llm_client: LLM client for concept extraction and hypothesis generation (e.g., GroqClient)
             vectordb: VectorDB for paper retrieval
             quality_filter: QualityFilter for scoring hypotheses
-            advanced_llm: AdvancedLLM for hypothesis generation (Claude/KIMI)
-                         Falls back to ollama_client if not provided
         """
-        self.ollama = ollama_client
-        self.advanced_llm = advanced_llm if advanced_llm else ollama_client
+        self.llm = llm_client
         self.vectordb = vectordb
         self.quality_filter = quality_filter
 
@@ -128,7 +130,7 @@ Text:
 Return format: ["concept1", "concept2", ...]"""
 
         try:
-            response = await self.ollama.generate(
+            response = await self.llm.generate(
                 prompt=prompt,
                 temperature=0.3,
                 max_tokens=500,
@@ -161,11 +163,25 @@ Return format: ["concept1", "concept2", ...]"""
         concept_graph: dict[str, list[tuple[str, str]]] = {}
         paper_concepts: dict[str, list[str]] = {}
 
-        for paper in papers:
-            paper_id = paper.get("paper_id", paper.get("id", "unknown"))
-            text = paper.get("text", paper.get("abstract", ""))
+        sem = asyncio.Semaphore(3)  # Limit concurrent Ollama calls
 
-            concepts = await self.extract_concepts(text)
+        async def extract_for_paper(paper):
+            async with sem:
+                paper_id = paper.get("paper_id", paper.get("id", "unknown"))
+                text = paper.get("text", paper.get("abstract", ""))
+                concepts = await self.extract_concepts(text)
+                return paper_id, concepts
+
+        results = await asyncio.gather(
+            *(extract_for_paper(p) for p in papers),
+            return_exceptions=True,
+        )
+
+        for result in results:
+            if isinstance(result, Exception):
+                logger.warning(f"Concept extraction failed: {result}")
+                continue
+            paper_id, concepts = result
             paper_concepts[paper_id] = concepts
 
             # Build connections: concepts in same paper are connected
@@ -199,6 +215,8 @@ Return format: ["concept1", "concept2", ...]"""
         processed = set()
 
         for bridging_concept, connections in concept_graph.items():
+            if len(abc_patterns) >= MAX_PATTERNS:
+                break
             # Group connections by paper
             papers_with_concept: dict[str, list[str]] = {}
             for connected_concept, paper_id in connections:
@@ -251,9 +269,9 @@ Return format: ["concept1", "concept2", ...]"""
         concept_pair: ConceptPair,
         paper_a_text: str,
         paper_b_text: str,
-    ) -> tuple[str, float]:
+    ) -> dict[str, Any]:
         """
-        Generate hypothesis text using LLM.
+        Generate hypothesis using LLM in HypothesisSpec format.
 
         Args:
             concept_pair: The ABC pattern to generate hypothesis for
@@ -261,9 +279,17 @@ Return format: ["concept1", "concept2", ...]"""
             paper_b_text: Text from paper B (B-C connection)
 
         Returns:
-            Tuple of (hypothesis_text, confidence_score)
+            Dict containing HypothesisSpec fields (hypothesis, confidence, task, dataset, baseline, variant, metric, expected_effect)
         """
-        prompt = f"""Based on Literature-Based Discovery (Swanson's ABC model):
+        prompt = f"""CRITICAL CONSTRAINTS - Vision Experiments ONLY:
+- Task: {CAPABILITIES["task"]} ONLY (image classification)
+- Available models: {", ".join(CAPABILITIES["models"])}
+- Available datasets: {", ".join(CAPABILITIES["datasets"])}
+- Available metrics: {", ".join(CAPABILITIES["metrics"])}
+- Do NOT propose text classification, NLP, or any non-vision tasks
+- All models and datasets MUST be from the lists above
+
+Based on Literature-Based Discovery (Swanson's ABC model):
 
 Paper 1 discusses: "{concept_pair.concept_a}" and "{concept_pair.bridging_concept}"
 Context: {paper_a_text[:1000]}
@@ -273,20 +299,30 @@ Context: {paper_b_text[:1000]}
 
 The bridging concept "{concept_pair.bridging_concept}" connects these two research areas.
 
-Generate a scientific hypothesis that proposes a potential connection between:
-- Concept A: {concept_pair.concept_a}
-- Concept C: {concept_pair.concept_b}
+Generate a scientific hypothesis comparing two vision models on an image classification task.
+The hypothesis should relate to the concepts above, but MUST use only available resources.
 
 Requirements:
-1. The hypothesis should be testable and specific
-2. Explain the potential mechanism through the bridging concept
-3. Rate your confidence (0.0-1.0) based on the strength of evidence
+1. The hypothesis MUST use image classification tasks ONLY
+2. Choose models from: {", ".join(CAPABILITIES["models"])}
+3. Choose dataset from: {", ".join(CAPABILITIES["datasets"])}
+4. Choose metric from: {", ".join(CAPABILITIES["metrics"])}
+5. Rate your confidence (0.0-1.0) based on the strength of evidence
 
-Return JSON format:
-{{"hypothesis": "...", "confidence": 0.X, "reasoning": "..."}}"""
+Return JSON with ALL 8 fields (HypothesisSpec format):
+{{
+    "hypothesis": "Natural language description relating to the concepts above",
+    "confidence": 0.X,
+    "task": "image_classification",
+    "dataset": "one of available datasets",
+    "baseline": {{"model": "one of available models", "pretrain": "imagenet"}},
+    "variant": {{"model": "different available model", "pretrain": "imagenet"}},
+    "metric": "one of available metrics",
+    "expected_effect": {{"direction": "increase or decrease", "min_delta_points": X.X}}
+}}"""
 
         try:
-            response = await self.advanced_llm.generate(
+            response = await self.llm.generate(
                 prompt=prompt,
                 temperature=0.5,
                 max_tokens=800,
@@ -298,17 +334,30 @@ Return JSON format:
                 response = response.rsplit("```", 1)[0]
 
             result = json.loads(response)
-            hypothesis_text = result.get("hypothesis", "")
             confidence = float(result.get("confidence", 0.5))
-            return hypothesis_text, min(max(confidence, 0.0), 1.0)
+            result["confidence"] = min(max(confidence, 0.0), 1.0)
+            return result
         except (json.JSONDecodeError, Exception) as e:
             logger.warning(f"Failed to generate hypothesis: {e}")
-            # Fallback hypothesis
-            fallback = (
+            fallback_hypothesis = (
                 f"There may be a connection between {concept_pair.concept_a} and "
                 f"{concept_pair.concept_b} mediated by {concept_pair.bridging_concept}."
             )
-            return fallback, 0.3
+            return {
+                "hypothesis": fallback_hypothesis,
+                "confidence": 0.3,
+                "task": CAPABILITIES["task"],
+                "dataset": CAPABILITIES["datasets"][0],
+                "baseline": {"model": CAPABILITIES["models"][0], "pretrain": "imagenet"},
+                "variant": {
+                    "model": CAPABILITIES["models"][1]
+                    if len(CAPABILITIES["models"]) > 1
+                    else CAPABILITIES["models"][0],
+                    "pretrain": "imagenet",
+                },
+                "metric": CAPABILITIES["metrics"][0],
+                "expected_effect": {"direction": "increase", "min_delta_points": 1.0},
+            }
 
     async def generate_from_papers(
         self,
@@ -354,42 +403,49 @@ Return JSON format:
         abc_patterns = await self.find_abc_patterns(concept_graph, paper_concepts)
 
         # Generate hypotheses for top patterns
-        hypotheses = []
-        for pattern in abc_patterns[:10]:  # Limit to top 10
-            # Get paper texts
-            paper_a = next((p for p in papers if p["paper_id"] == pattern.paper_a_id), None)
-            paper_b = next((p for p in papers if p["paper_id"] == pattern.paper_b_id), None)
+        sem = asyncio.Semaphore(3)  # Limit concurrent Trinity Large calls
 
-            if not paper_a or not paper_b:
-                continue
+        async def gen_one(pattern):
+            async with sem:
+                paper_a = next((p for p in papers if p["paper_id"] == pattern.paper_a_id), None)
+                paper_b = next((p for p in papers if p["paper_id"] == pattern.paper_b_id), None)
 
-            hypothesis_text, confidence = await self.generate_hypothesis_text(
-                pattern,
-                paper_a.get("text", ""),
-                paper_b.get("text", ""),
-            )
+                if not paper_a or not paper_b:
+                    return None
 
-            if not hypothesis_text:
-                continue
+                hypothesis_spec = await self.generate_hypothesis_text(
+                    pattern,
+                    paper_a.get("text", ""),
+                    paper_b.get("text", ""),
+                )
 
-            # Score with quality filter
-            quality_score = self.quality_filter.score(hypothesis_text)
+                if not hypothesis_spec or not hypothesis_spec.get("hypothesis"):
+                    return None
 
-            hypothesis = Hypothesis(
-                id=str(uuid.uuid4()),
-                hypothesis_text=hypothesis_text,
-                source_papers=[pattern.paper_a_id, pattern.paper_b_id],
-                connection={
-                    "concept_a": pattern.concept_a,
-                    "concept_b": pattern.concept_b,
-                    "bridging_concept": pattern.bridging_concept,
-                },
-                confidence=confidence,
-                quality_score=quality_score,
-            )
-            hypotheses.append(hypothesis)
+                hypothesis_text = hypothesis_spec["hypothesis"]
+                confidence = hypothesis_spec["confidence"]
 
-        # Sort by combined score
+                quality_score = self.quality_filter.score(hypothesis_text)
+
+                return Hypothesis(
+                    id=str(uuid.uuid4()),
+                    hypothesis_text=hypothesis_text,
+                    source_papers=[pattern.paper_a_id, pattern.paper_b_id],
+                    connection={
+                        "concept_a": pattern.concept_a,
+                        "concept_b": pattern.concept_b,
+                        "bridging_concept": pattern.bridging_concept,
+                    },
+                    confidence=confidence,
+                    quality_score=quality_score,
+                )
+
+        results = await asyncio.gather(
+            *(gen_one(p) for p in abc_patterns[:10]),
+            return_exceptions=True,
+        )
+
+        hypotheses = [r for r in results if isinstance(r, Hypothesis)]
         hypotheses.sort(
             key=lambda h: (h.confidence + h.quality_score) / 2,
             reverse=True,
