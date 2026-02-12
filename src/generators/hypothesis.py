@@ -163,7 +163,7 @@ Return format: ["concept1", "concept2", ...]"""
         concept_graph: dict[str, list[tuple[str, str]]] = {}
         paper_concepts: dict[str, list[str]] = {}
 
-        sem = asyncio.Semaphore(3)  # Limit concurrent Ollama calls
+        sem = asyncio.Semaphore(1)  # Serial requests to avoid rate limits
 
         async def extract_for_paper(paper):
             async with sem:
@@ -403,7 +403,7 @@ Return JSON with ALL 8 fields (HypothesisSpec format):
         abc_patterns = await self.find_abc_patterns(concept_graph, paper_concepts)
 
         # Generate hypotheses for top patterns
-        sem = asyncio.Semaphore(3)  # Limit concurrent Trinity Large calls
+        sem = asyncio.Semaphore(1)  # Serial requests to avoid rate limits
 
         async def gen_one(pattern):
             async with sem:

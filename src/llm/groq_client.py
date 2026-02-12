@@ -8,9 +8,14 @@ import httpx
 import json
 import logging
 import os
+import time
 from typing import Optional, Dict, Any, List, AsyncIterator
 
 logger = logging.getLogger(__name__)
+
+_global_rate_limiter = asyncio.Lock()
+_last_request_time = 0.0
+_min_request_interval = 2.0
 
 
 class GroqClient:
@@ -95,6 +100,16 @@ class GroqClient:
 
     async def _generate(self, payload: Dict[str, Any]) -> str:
         """Non-streaming generation"""
+        global _last_request_time
+
+        async with _global_rate_limiter:
+            now = time.time()
+            elapsed = now - _last_request_time
+            if elapsed < _min_request_interval:
+                wait_time = _min_request_interval - elapsed
+                await asyncio.sleep(wait_time)
+            _last_request_time = time.time()
+
         try:
             logger.debug(f"Groq API request: {self.model}")
             response = await self.client.post(
