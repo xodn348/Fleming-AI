@@ -8,9 +8,6 @@ from typing import Optional, List, AsyncIterator, Any
 from dataclasses import dataclass
 
 from src.llm.claude_client import ClaudeClient
-from src.llm.gemini_client import GeminiClient
-from src.llm.groq_client import GroqClient
-from src.llm.openrouter_client import OpenRouterClient
 
 logger = logging.getLogger(__name__)
 
@@ -25,13 +22,7 @@ class BackendConfig:
 
 class BackendSwitcher:
     """
-    Smart LLM backend switcher with automatic fallback
-
-    Priority order:
-    1. Claude (highest quality, recommended)
-    2. Gemini (free, high quality, 1500 RPD)
-    3. Groq (free, fast, 30 RPM but rate-limited)
-    4. OpenRouter (free, 200 RPD)
+    LLM backend switcher using Claude only (Opus 4.5/4.6)
 
     Usage:
         switcher = BackendSwitcher()
@@ -41,16 +32,14 @@ class BackendSwitcher:
     def __init__(self):
         self.backends: List[BackendConfig] = [
             BackendConfig("claude", ClaudeClient, priority=1),
-            BackendConfig("gemini", GeminiClient, priority=2),
-            BackendConfig("groq", GroqClient, priority=3),
-            BackendConfig("openrouter", OpenRouterClient, priority=4),
+            # Gemini, Groq, OpenRouter removed - Claude Opus only
         ]
 
         self._active_client: Optional[Any] = None
         self._active_backend: Optional[str] = None
         self._failed_backends: set[str] = set()
 
-        logger.info("BackendSwitcher initialized with 3 backends")
+        logger.info("BackendSwitcher initialized with Claude only (Opus 4.5/4.6)")
 
     async def __aenter__(self):
         return self
