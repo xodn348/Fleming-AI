@@ -47,6 +47,59 @@ python scripts/run_full_research.py
 
 ---
 
+## 정리 및 제거
+
+### OpenCode와 세션 키 충돌 방지
+
+Fleming-AI와 OpenCode가 같은 `CLAUDE_SESSION_KEY`를 사용하면 rate limit을 공유하게 됩니다.
+
+**해결 방법**:
+```bash
+# 옵션 1: Fleming 실행할 때만 OpenCode 종료
+# OpenCode를 끄고 → Fleming 실행 → 완료 후 OpenCode 재시작
+
+# 옵션 2: 별도 세션 키 사용 (권장)
+# 다른 브라우저(Safari, Firefox 등)에서 claude.ai 로그인 → 다른 세션 키 발급
+# Fleming-AI .env에는 별도 키 사용
+```
+
+### 실행 중단
+
+```bash
+# 실행 중인 파이프라인 중단
+Ctrl+C
+
+# 또는 프로세스 찾아서 종료
+ps aux | grep run_full_research
+kill -9 [PID]
+```
+
+### 생성된 데이터 정리
+
+```bash
+cd Fleming-AI
+
+# 실험 결과물만 삭제 (설정은 유지)
+rm -rf runs/
+rm -rf data/db/chromadb/
+rm -rf experiment/results/
+
+# 또는 전체 데이터베이스 초기화
+rm -rf data/
+```
+
+### 완전 제거
+
+```bash
+# Fleming-AI 전체 삭제
+cd ..
+rm -rf Fleming-AI
+
+# .env 파일도 삭제됨 (세션 키 정보 포함)
+```
+
+---
+
 ## Overview
 
 Fleming-AI is a comprehensive system designed to automatically collect, filter, validate, and analyze research papers from various sources. It leverages AI to intelligently process academic content and organize it for further analysis.
