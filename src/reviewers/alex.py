@@ -10,7 +10,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from src.llm.groq_client import GroqClient
+from src.llm.claude_client import ClaudeClient
 from src.reviewers.schemas import ReviewResult, ReviewTurn
 from src.reviewers import knowledge
 
@@ -25,15 +25,15 @@ class Alex:
     Returns structured ReviewResult with verdict, strengths, weaknesses, scores
     """
 
-    def __init__(self, llm_client: GroqClient):
+    def __init__(self, llm_client: ClaudeClient):
         """
         Initialize Alex reviewer.
 
         Args:
-            llm_client: GroqClient instance for LLM backend
+            llm_client: ClaudeClient instance for LLM backend
         """
         self.llm = llm_client
-        self.rate_limit_delay = 2.0  # seconds between Groq API calls
+        self.rate_limit_delay = 2.0  # seconds between Claude API calls
         self.review_patterns = self._load_review_patterns()
 
         # Map stage names to prompts

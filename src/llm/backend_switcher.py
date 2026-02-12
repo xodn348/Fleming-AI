@@ -7,7 +7,7 @@ import logging
 from typing import Optional, List, AsyncIterator, Any
 from dataclasses import dataclass
 
-from src.llm.claude_client import ClaudeClient
+from src.llm.groq_client import GroqClient
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +22,7 @@ class BackendConfig:
 
 class BackendSwitcher:
     """
-    LLM backend switcher using Claude only (Opus 4.5/4.6)
+    LLM backend switcher using Groq only (Llama 3.3 70B)
 
     Usage:
         switcher = BackendSwitcher()
@@ -31,15 +31,14 @@ class BackendSwitcher:
 
     def __init__(self):
         self.backends: List[BackendConfig] = [
-            BackendConfig("claude", ClaudeClient, priority=1),
-            # Gemini, Groq, OpenRouter removed - Claude Opus only
+            BackendConfig("groq", GroqClient, priority=1),
         ]
 
         self._active_client: Optional[Any] = None
         self._active_backend: Optional[str] = None
         self._failed_backends: set[str] = set()
 
-        logger.info("BackendSwitcher initialized with Claude only (Opus 4.5/4.6)")
+        logger.info("BackendSwitcher initialized with Groq only (Llama 3.3 70B)")
 
     async def __aenter__(self):
         return self

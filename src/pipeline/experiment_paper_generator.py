@@ -7,13 +7,15 @@ import asyncio
 import logging
 from typing import Any, Dict, List, Optional
 
+from src.llm.groq_client import GroqClient
+
 logger = logging.getLogger(__name__)
 
 
 class ExperimentPaperGenerator:
     """Generate NeurIPS-format academic papers from ML experiment results"""
 
-    def __init__(self, groq_client: Any = None, vector_db: Any = None):
+    def __init__(self, groq_client: GroqClient = None, vector_db: Any = None):
         """
         Initialize experiment paper generator
 

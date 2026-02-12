@@ -13,9 +13,7 @@ except ImportError:
     load_dotenv = None
 
 from src.llm.backend_switcher import BackendSwitcher
-from src.llm.gemini_client import GeminiClient
 from src.llm.groq_client import GroqClient
-from src.llm.openrouter_client import OpenRouterClient
 
 logger = logging.getLogger(__name__)
 
@@ -24,51 +22,34 @@ class PipelineLLM:
     """
     Unified LLM interface for Fleming-AI pipeline
 
-    Automatically loads API keys from .env and uses BackendSwitcher
-    for reliable LLM access with fallback across multiple providers.
-
-    Priority order: Gemini → Groq → OpenRouter
+    Wraps BackendSwitcher (Groq-only) for Fleming's generation tasks.
+    Note: For new code, prefer using GroqClient directly.
 
     Usage:
         llm = PipelineLLM()
         result = await llm.generate("Say hello", max_tokens=50)
 
-        # Validate all backends
+        # Validate Groq backend
         status = await llm.validate_backends()
-        print(status)  # {"gemini": True, "groq": False, "openrouter": True}
+        print(status)  # {"groq": True}
     """
 
     def __init__(self):
         """
-        Initialize PipelineLLM with API keys from environment
+        Initialize PipelineLLM with Groq API key from environment
 
         Loads keys from .env:
-        - GOOGLE_API_KEY for Gemini
-        - GROQ_API_KEY for Groq
-        - OPENROUTER_API_KEY for OpenRouter
+        - GROQ_API_KEY for Groq (required)
         """
         if load_dotenv is not None:
             load_dotenv()
 
-        self.gemini_key = os.getenv("GOOGLE_API_KEY")
         self.groq_key = os.getenv("GROQ_API_KEY")
-        self.openrouter_key = os.getenv("OPENROUTER_API_KEY")
 
-        available_keys = sum(
-            [
-                bool(self.gemini_key),
-                bool(self.groq_key),
-                bool(self.openrouter_key),
-            ]
-        )
+        if not self.groq_key:
+            raise ValueError("No GROQ_API_KEY found. Please set GROQ_API_KEY in .env")
 
-        if available_keys == 0:
-            raise ValueError(
-                "No API keys found. Please set at least one of: "
-                "GOOGLE_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY"
-            )
-
-        logger.info(f"PipelineLLM initialized with {available_keys}/3 API keys configured")
+        logger.info("PipelineLLM initialized with Groq backend")
 
         self.switcher = BackendSwitcher()
 
@@ -121,26 +102,13 @@ class PipelineLLM:
 
     async def validate_backends(self) -> dict[str, bool]:
         """
-        Test all three API backends with simple prompts
+        Test Groq backend with simple prompt
 
         Returns:
             Dictionary mapping backend name to availability status
-            Example: {"gemini": True, "groq": False, "openrouter": True}
+            Example: {"groq": True}
         """
         results = {}
-
-        if self.gemini_key:
-            try:
-                client = GeminiClient(api_key=self.gemini_key)
-                response = await client.generate("Hi", max_tokens=50)
-                results["gemini"] = bool(response and len(response) > 0)
-                logger.info("✓ Gemini backend validated")
-            except Exception as e:
-                logger.warning(f"✗ Gemini validation failed: {e}")
-                results["gemini"] = False
-        else:
-            logger.info("○ Gemini key not configured")
-            results["gemini"] = False
 
         if self.groq_key:
             try:
@@ -155,34 +123,18 @@ class PipelineLLM:
             logger.info("○ Groq key not configured")
             results["groq"] = False
 
-        if self.openrouter_key:
-            try:
-                async with OpenRouterClient(api_key=self.openrouter_key) as client:
-                    response = await client.generate("Hi", max_tokens=50)
-                results["openrouter"] = bool(response and len(response) > 0)
-                logger.info("✓ OpenRouter backend validated")
-            except Exception as e:
-                logger.warning(f"✗ OpenRouter validation failed: {e}")
-                results["openrouter"] = False
-        else:
-            logger.info("○ OpenRouter key not configured")
-            results["openrouter"] = False
-
-        working = sum(results.values())
-        logger.info(f"Backend validation complete: {working}/3 backends working")
-
-        if working == 0:
-            logger.error("WARNING: No backends are working!")
+        if not results.get("groq"):
+            logger.error("WARNING: Groq backend is not working!")
 
         return results
 
     def get_backend_status(self) -> dict[str, str]:
         """
-        Get current status of all backends in the switcher
+        Get current status of Groq backend in the switcher
 
         Returns:
             Dictionary mapping backend name to status
-            Example: {"gemini": "available", "groq": "failed", "openrouter": "available"}
+            Example: {"groq": "available"}
         """
         return self.switcher.get_backend_status()
 
@@ -191,7 +143,7 @@ class PipelineLLM:
         Get the name of the currently active backend
 
         Returns:
-            Backend name (e.g., "gemini") or None if no backend is active
+            Backend name ("groq") or None if no backend is active
         """
         return await self.switcher.get_active_backend()
 
