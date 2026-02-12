@@ -34,8 +34,8 @@ class ContinuousRunner:
 
     def __init__(self):
         self.runner = FlemingRunner(
-            cycle_delay=3600,  # 1 hour between cycles
-            test_mode=False
+            cycle_delay=0,  # No delay - run continuously
+            test_mode=False,
         )
         self._running = False
         self._shutdown_event = asyncio.Event()
@@ -61,7 +61,7 @@ class ContinuousRunner:
 
         logger.info("=" * 80)
         logger.info("Fleming-AI Continuous Collection Started")
-        logger.info("Mode: Continuous (1 hour cycle)")
+        logger.info("Mode: Continuous (no delay - running until 1000 hypotheses)")
         logger.info("=" * 80)
 
         try:

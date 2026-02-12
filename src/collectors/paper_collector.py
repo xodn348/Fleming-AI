@@ -33,15 +33,16 @@ class PaperCollector:
         db_path = self.config.get("db_path", "data/db/papers.db")
         self.db = PaperDatabase(db_path)
 
-        self.min_citations = self.config.get("min_citations", 100)
-        self.quality_threshold = self.config.get("quality_threshold", 60)
+        self.min_citations = self.config.get("min_citations", 50)
+        self.quality_threshold = self.config.get("quality_threshold", 45)
+        self.current_page = 1
 
     async def discover(self, limit: int = 100) -> List[Dict[str, Any]]:
         """Discover papers using OpenAlex API.
 
         Searches for papers with:
-        - Citation count >= min_citations (default: 100)
-        - Recent papers (last 7 years: 2019-2026)
+        - Citation count >= min_citations (default: 50, balanced threshold)
+        - Recent papers (last 11 years: 2015-2026, expanded for scale)
         - Type: article (peer-reviewed)
 
         Quality filtering by venue tier happens in filter() step.
@@ -59,11 +60,12 @@ class PaperCollector:
             response = self.openalex.search(
                 filters={
                     "cited_by_count": f">{self.min_citations}",
-                    "publication_year": "2019-2026",  # Last 7 years
+                    "publication_year": "2015-2026",  # Last 11 years (expanded for scale)
                     "type": "article",
                 },
                 sort="cited_by_count:desc",
                 per_page=min(limit, 200),  # OpenAlex max per_page is 200
+                page=self.current_page,
                 select=[
                     "id",
                     "doi",
@@ -125,6 +127,10 @@ class PaperCollector:
 
                 if len(discovered_papers) >= limit:
                     break
+
+            self.current_page += 1
+            if self.current_page > 20:
+                self.current_page = 1
 
         except Exception as e:
             print(f"⚠️  Error searching OpenAlex: {e}")

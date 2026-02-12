@@ -89,7 +89,8 @@ class OpenAlexClient:
         filters: Optional[Dict[str, Any]] = None,
         sort: Optional[str] = None,
         per_page: int = 25,
-        page: int = 1,
+        page: Optional[int] = None,
+        cursor: Optional[str] = None,
         select: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Search for works.
@@ -102,14 +103,22 @@ class OpenAlexClient:
                     type, authorships.author.id, concepts.id, etc.
             sort: Sort criterion (e.g., "cited_by_count:desc", "publication_date:asc")
             per_page: Number of results per page (max 200)
-            page: Page number (1-indexed)
+            page: Page number (1-indexed, only works up to 10k results)
+            cursor: Cursor for pagination (use instead of page for >10k results)
             select: List of fields to return for each work
 
         Returns:
-            Dictionary with 'results' (list of works), 'meta' (pagination info)
+            Dictionary with 'results' (list of works), 'meta' (pagination info including next_cursor)
         """
         url = f"{self.BASE_URL}/works"
-        params: Dict[str, Any] = {"per-page": min(per_page, 200), "page": page}
+        params: Dict[str, Any] = {"per-page": min(per_page, 200)}
+
+        if cursor is not None:
+            params["cursor"] = cursor
+        elif page is not None:
+            params["page"] = page
+        else:
+            params["page"] = 1
 
         # Build filter string
         filter_parts = []

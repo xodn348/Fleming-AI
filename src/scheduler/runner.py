@@ -105,6 +105,18 @@ class FlemingRunner:
 
                 success = await self.run_once()
 
+                # Check hypothesis count after successful cycle
+                if success:
+                    from src.storage.hypothesis_db import HypothesisDatabase
+
+                    with HypothesisDatabase() as db:
+                        total_hypotheses = db.count_hypotheses()
+                        logger.info(f"Progress: {total_hypotheses}/1000 hypotheses")
+                        if total_hypotheses >= 1000:
+                            logger.info("🎉 TARGET REACHED: 1000 hypotheses generated!")
+                            self._running = False
+                            break
+
                 if not success:
                     retry_count += 1
                     if retry_count < self.max_retries:
@@ -128,11 +140,17 @@ class FlemingRunner:
 
             # Wait before next cycle (unless shutting down)
             if self._running:
-                logger.info(f"Waiting {self.cycle_delay}s before next cycle...")
-                try:
-                    await asyncio.wait_for(self._shutdown_event.wait(), timeout=self.cycle_delay)
-                except asyncio.TimeoutError:
-                    pass  # Normal timeout, continue to next cycle
+                if self.cycle_delay > 0:
+                    logger.info(f"Waiting {self.cycle_delay}s before next cycle...")
+                    try:
+                        await asyncio.wait_for(
+                            self._shutdown_event.wait(), timeout=self.cycle_delay
+                        )
+                    except asyncio.TimeoutError:
+                        pass
+                else:
+                    logger.info("Starting next cycle immediately...")
+                    await asyncio.sleep(1)
 
         logger.info("Continuous execution stopped")
 
@@ -180,7 +198,9 @@ class FlemingRunner:
         from src.collectors.paper_collector import PaperCollector
 
         logger.info("=== Starting Paper Collection Cycle ===")
-        collector = PaperCollector()
+        if not hasattr(self, "_collector"):
+            self._collector = PaperCollector()
+        collector = self._collector
 
         # Step 1: Discover candidates
         logger.info("Step 1/4: Discovering candidate papers...")
@@ -234,79 +254,17 @@ class FlemingRunner:
         logger.info(f"Sampled {len(sampled)} papers from {len(all_paper_ids)} available")
         return sampled
 
-    async def _collect_papers(self):
-        """Collect papers from multiple sources (arXiv, Semantic Scholar, OpenAlex)"""
-        from src.collectors.arxiv_client import ArxivClient
-        from src.collectors.semantic_scholar_client import SemanticScholarClient
-        from src.collectors.openalex_client import OpenAlexClient
-        from src.storage.database import PaperDatabase
-        import httpx
-
-        max_results = 3 if self.test_mode else 10
-        collected_papers = []
-
-        # Try Source 1: arXiv
-        try:
-            with ArxivClient() as client:
-                papers = client.search(
-                    query="cat:cs.AI OR cat:cs.LG",
-                    max_results=max_results,
-                    sort_by="submittedDate",
-                )
-                collected_papers.extend(papers)
-                logger.info(f"✓ arXiv: {len(papers)} papers")
-        except Exception as e:
-            logger.warning(f"✗ arXiv failed: {str(e)[:50]}")
-
-        # Try Source 2: Semantic Scholar (if we need more)
-        if len(collected_papers) < max_results:
-            try:
-                client = SemanticScholarClient()
-                papers = await client.search(
-                    query="machine learning",
-                    limit=max_results - len(collected_papers),
-                )
-                collected_papers.extend(papers)
-                logger.info(f"✓ Semantic Scholar: {len(papers)} papers")
-                await client.close()
-            except Exception as e:
-                logger.warning(f"✗ Semantic Scholar failed: {str(e)[:50]}")
-
-        # Try Source 3: OpenAlex (if we still need more)
-        if len(collected_papers) < max_results:
-            try:
-                client = OpenAlexClient()
-                papers = await client.search(
-                    query="artificial intelligence",
-                    limit=max_results - len(collected_papers),
-                )
-                collected_papers.extend(papers)
-                logger.info(f"✓ OpenAlex: {len(papers)} papers")
-                await client.close()
-            except Exception as e:
-                logger.warning(f"✗ OpenAlex failed: {str(e)[:50]}")
-
-        # Fallback: Use existing papers from DB
-        if not collected_papers:
-            logger.warning("All sources failed, using existing papers from DB")
-            with PaperDatabase("data/db/papers.db") as db:
-                all_papers = db.get_all_papers()
-                collected_papers = all_papers[:max_results] if all_papers else []
-                logger.info(f"✓ Local DB: {len(collected_papers)} papers")
-
-        logger.info(f"Total collected: {len(collected_papers)} papers from all sources")
-        return collected_papers
-
     async def _generate_hypotheses(self, paper_ids: Optional[list[str]] = None):
         """Generate hypotheses from sampled papers."""
         from src.llm.ollama_client import OllamaClient
-        from src.llm.advanced_llm import AdvancedLLM
+        from src.llm.openrouter_client import OpenRouterClient
         from src.generators.hypothesis import HypothesisGenerator
         from src.storage.vectordb import VectorDB
         from src.storage.hypothesis_db import HypothesisDatabase
         from src.filters.quality import QualityFilter
 
-        async with OllamaClient() as ollama, AdvancedLLM() as advanced_llm:
+        async with OllamaClient() as ollama:
+            deepseek = OpenRouterClient()
             vectordb = VectorDB()
             quality_filter = QualityFilter()
 
@@ -314,14 +272,28 @@ class FlemingRunner:
                 ollama_client=ollama,
                 vectordb=vectordb,
                 quality_filter=quality_filter,
-                advanced_llm=advanced_llm,
+                advanced_llm=deepseek,
             )
 
             if paper_ids:
-                hypotheses = await generator.generate_from_papers(paper_ids)
+                try:
+                    hypotheses = await asyncio.wait_for(
+                        generator.generate_from_papers(paper_ids),
+                        timeout=300,
+                    )
+                except asyncio.TimeoutError:
+                    logger.error("Hypothesis generation timed out after 300s")
+                    hypotheses = []
             else:
                 sampled = await self._sample_papers()
-                hypotheses = await generator.generate_from_papers(sampled)
+                try:
+                    hypotheses = await asyncio.wait_for(
+                        generator.generate_from_papers(sampled),
+                        timeout=300,
+                    )
+                except asyncio.TimeoutError:
+                    logger.error("Hypothesis generation timed out after 300s")
+                    hypotheses = []
 
             # Store hypotheses in database
             with HypothesisDatabase() as db:

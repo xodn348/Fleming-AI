@@ -24,6 +24,7 @@ def sync_to_drive(
     remote_path: str,
     config_name: str = "gdrive",
     dry_run: bool = False,
+    use_copy: bool = True,
 ) -> Optional[dict[str, str]]:
     """
     Sync local directory to Google Drive using rclone.
@@ -33,6 +34,7 @@ def sync_to_drive(
         remote_path: Remote path on Google Drive (e.g., "gdrive:/path/to/folder")
         config_name: rclone config name (default: "gdrive")
         dry_run: If True, perform a dry run without actual sync
+        use_copy: If True, use copy (safer, doesn't delete), if False use sync (mirrors)
 
     Returns:
         dict with sync results or None if rclone is not available
@@ -48,9 +50,10 @@ def sync_to_drive(
     if not local_path_obj.exists():
         raise ValueError(f"Local path does not exist: {local_path_obj}")
 
+    operation = "copy" if use_copy else "sync"
     cmd = [
         "rclone",
-        "sync",
+        operation,
         str(local_path_obj),
         remote_path,
         "--verbose",
@@ -66,7 +69,7 @@ def sync_to_drive(
             text=True,
             check=True,
         )
-        logger.info(f"Successfully synced {local_path_obj} to {remote_path}")
+        logger.info(f"Successfully {operation}ed {local_path_obj} to {remote_path}")
         return {
             "status": "success",
             "local_path": str(local_path_obj),
@@ -74,7 +77,7 @@ def sync_to_drive(
             "stdout": result.stdout,
         }
     except subprocess.CalledProcessError as e:
-        logger.error(f"rclone sync failed: {e.stderr}")
+        logger.error(f"rclone {operation} failed: {e.stderr}")
         raise
 
 

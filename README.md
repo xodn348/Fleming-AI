@@ -1,6 +1,51 @@
 # Fleming-AI
 
-Intelligent research paper collection and analysis system powered by AI.
+자동으로 논문을 읽고 가설을 생성하여 연구 논문을 작성하는 AI 시스템
+
+## Quick Start (빠른 시작)
+
+### 1. 설치
+```bash
+git clone https://github.com/xodn348/Fleming-AI.git
+cd Fleming-AI
+uv sync  # 또는 pip install -e .
+```
+
+### 2. API 키 설정
+`.env` 파일 생성:
+```bash
+# Claude 세션 키 (추천 - 무료!)
+# claude.ai 로그인 → F12 → Application → Cookies → sessionKey 복사
+CLAUDE_SESSION_KEY=sk-ant-sid01-...
+
+# 또는 무료 대안
+GOOGLE_API_KEY=...      # Gemini (무료 1500 req/day)
+GROQ_API_KEY=...        # Groq (무료 30 req/min)
+OPENROUTER_API_KEY=...  # OpenRouter (무료 200 req/day)
+
+# 로컬 임베딩 (필수)
+# Ollama 설치: curl -fsSL https://ollama.com/install.sh | sh
+# ollama pull nomic-embed-text
+```
+
+### 3. 전체 연구 파이프라인 실행
+```bash
+python scripts/run_full_research.py
+```
+
+**결과물**: `runs/[timestamp]/paper.pdf` - NeurIPS 형식 논문 (4페이지)
+
+**파이프라인**:
+1. 가설 생성 (vision-only, structured)
+2. 실행가능성 검증
+3. Alex 리뷰 (가설 품질 평가)
+4. 실험 실행 (DeiT-Small vs ResNet-34 on Flowers102/CIFAR-10)
+5. 결과 분석 및 그래프 생성
+6. 논문 작성 및 PDF 컴파일
+
+**예상 시간**: 약 12분
+
+---
 
 ## Overview
 
