@@ -441,7 +441,7 @@ class FullResearchPipeline:
         return status
 
     async def generate_hypotheses(self) -> list[Hypothesis]:
-        if self.llm is None or self.vectordb is None:
+        if self.groq_llm is None or self.vectordb is None:
             raise RuntimeError("Pipeline dependencies are not initialized")
 
         quality_filter = QualityFilter()
@@ -660,7 +660,7 @@ class FullResearchPipeline:
         return round(rank_score, 4)
 
     async def review_hypothesis(self, hypotheses: list[Hypothesis]) -> dict[str, Any]:
-        if self.llm is None or self.alex is None:
+        if self.groq_llm is None or self.claude_llm is None or self.alex is None:
             raise RuntimeError("Pipeline dependencies are not initialized")
 
         ranked = sorted(hypotheses, key=self._rank_hypothesis, reverse=True)
@@ -749,7 +749,7 @@ class FullResearchPipeline:
         return output
 
     async def translate_experiment(self, hypothesis_text: str) -> dict[str, Any]:
-        if self.llm is None:
+        if self.groq_llm is None:
             raise RuntimeError("Pipeline dependencies are not initialized")
 
         translator = PipelineExperimentTranslator(llm_client=self.groq_llm)
@@ -1246,7 +1246,7 @@ class FullResearchPipeline:
         config: dict[str, Any],
         full_results: dict[str, Any],
     ) -> str:
-        if self.llm is None or self.vectordb is None:
+        if self.groq_llm is None or self.vectordb is None:
             raise RuntimeError("Pipeline dependencies are not initialized")
 
         paper_input_results: dict[str, Any] = {}
@@ -1280,7 +1280,7 @@ class FullResearchPipeline:
         full_results: dict[str, Any],
         paper_text: str,
     ) -> str:
-        if self.llm is None or self.alex is None:
+        if self.groq_llm is None or self.claude_llm is None or self.alex is None:
             raise RuntimeError("Pipeline dependencies are not initialized")
 
         conversation = ConversationManager(max_turns=MAX_REVIEW_TURNS)
