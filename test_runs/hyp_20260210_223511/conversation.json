@@ -1,0 +1,21 @@
+{
+  "run_id": "hyp_20260210_223511",
+  "timestamp": "2026-02-10T22:35:13.588544",
+  "stages": [
+    {
+      "stage": "hypothesis",
+      "num_turns": 1,
+      "converged": true,
+      "escalation": null,
+      "final_verdict": "PASS",
+      "final_scores": {
+        "clarity": 0.8
+      }
+    }
+  ],
+  "total_turns": 1,
+  "total_llm_calls": 2,
+  "stages_completed": [
+    "hypothesis"
+  ]
+}

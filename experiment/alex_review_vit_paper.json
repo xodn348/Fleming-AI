@@ -1,0 +1,62 @@
+{
+  "review_id": "alex_vit_paper_20260210",
+  "paper_title": "The Effect of Pre-training on Vision Transformers vs Convolutional Networks: A Controlled Comparison",
+  "verdict": "REVISE",
+  "stage": "paper",
+  "timestamp": "2026-02-10T05:51:00Z",
+  
+  "strengths": [
+    "Rigorous 2×2 factorial design with 120 experiments provides strong statistical power",
+    "Clear research question directly addressing a common assumption in the field",
+    "Excellent use of effect sizes (Cohen's d) alongside p-values to distinguish statistical from practical significance",
+    "Comprehensive evaluation across 5 diverse datasets and 2 evaluation methods",
+    "Transparent reporting of all experimental conditions and hyperparameters",
+    "Strong statistical analysis with two-way ANOVA appropriately applied"
+  ],
+  
+  "weaknesses": [
+    "Limitations section exists but lacks depth - doesn't discuss potential confounds (e.g., pre-training dataset overlap with downstream tasks, ImageNet bias)",
+    "Overclaiming in abstract and introduction - 'revolutionized' is too strong; ViTs are one advancement among many",
+    "Missing critical reproducibility details: no GitHub repo link, no dataset splits documentation, no compute time reported",
+    "Results only show first 8K characters were reviewed - full paper analysis needed for complete assessment",
+    "No discussion of statistical assumptions (normality, homogeneity of variance) for ANOVA validity",
+    "Acknowledgments section mentions LLM assistance but doesn't specify which sections were LLM-generated vs human-written",
+    "No discussion of multiple comparisons correction despite 120 experiments",
+    "Figures referenced (fig_interaction.pdf, fig_delta_comparison.pdf) but not verified if they exist"
+  ],
+  
+  "questions": [
+    "Were ANOVA assumptions (normality, homogeneity of variance) tested? If violated, were corrections applied?",
+    "How much overlap exists between ImageNet-1k classes and downstream dataset classes (especially Flowers102, Oxford Pets)?",
+    "What is the actual compute time and cost for running 120 experiments?",
+    "Were multiple comparisons corrections (Bonferroni, Holm-Bonferroni) applied given the large number of experiments?",
+    "How were the three random seeds (42, 123, 456) selected? Why these specific values?",
+    "Are the figures in ../figures/ actually generated and present?"
+  ],
+  
+  "suggestions": [
+    "Expand Limitations section to discuss: (1) ImageNet-downstream dataset overlap, (2) supervised vs self-supervised pre-training differences, (3) computational cost constraints, (4) generalization beyond classification",
+    "Soften language: 'revolutionized' → 'significantly advanced', 'massive' → 'substantial'",
+    "Add Reproducibility subsection in Methods with: GitHub repository link, exact library versions (PyTorch, timm), compute time per experiment, total TPU/GPU hours",
+    "Add statistical assumptions testing: Shapiro-Wilk test for normality, Levene's test for homogeneity of variance",
+    "Clarify LLM contribution: specify which sections used LLM assistance (e.g., 'Related Work drafted by LLM, reviewed and edited by author')",
+    "Add brief discussion of multiple comparisons: either justify no correction (pre-specified factorial design) or apply Holm-Bonferroni",
+    "Verify all figure files exist and compile properly before submission",
+    "Add brief discussion of why p < 0.0001 for negligible interaction (high power + large sample)"
+  ],
+  
+  "scores": {
+    "structure": 0.85,
+    "overclaiming": 0.65,
+    "limitations": 0.60,
+    "related_work": 0.80,
+    "reproducibility": 0.55,
+    "clarity": 0.85,
+    "statistical_rigor": 0.75,
+    "overall": 0.72
+  },
+  
+  "requested_experiments": null,
+  
+  "summary": "Strong empirical study with excellent experimental design and statistical analysis. Main issues: (1) shallow Limitations section, (2) missing reproducibility details (code, compute time), (3) minor overclaiming in language. Revisions needed before acceptance, but the core contribution is solid."
+}

@@ -36,6 +36,10 @@ dev = [
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
+markers = [
+    "slow: marks tests as slow (requiring API calls)",
+    "integration: marks tests as integration tests",
+]
 
 [tool.black]
 line-length = 100

@@ -29,7 +29,7 @@ class VectorDB:
             path=str(self.persist_dir),
             settings=Settings(
                 anonymized_telemetry=False,
-                allow_reset=True,
+                allow_reset=False,
             ),
         )
 

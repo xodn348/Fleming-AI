@@ -1,0 +1,35 @@
+experiment:
+  name: "transformer-pretraining-interaction"
+  output_dir: "/Users/jnnj92/Fleming-AI/experiment/results"
+
+training:
+  linear_probe:
+    epochs: 100
+    lr_grid: [0.001, 0.01, 0.1, 1.0]
+    optimizer: "sgd"
+    scheduler: "cosine"
+
+  from_scratch:
+    epochs: 200
+    lr: 0.001
+    warmup_epochs: 10
+    gradient_clip: 1.0
+    early_stopping_patience: 20
+    timeout_hours: 4
+
+evaluation:
+  knn:
+    k: 20
+    metric: "cosine"
+
+hardware:
+  device: "mps"
+  batch_size_pretrained: 32
+  batch_size_scratch: 16
+  gradient_accumulation_steps: 8
+  num_workers: 4
+
+datasets:
+  resize: 224
+  imagenet_mean: [0.485, 0.456, 0.406]
+  imagenet_std: [0.229, 0.224, 0.225]

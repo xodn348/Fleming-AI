@@ -18,7 +18,7 @@ class TestArxivClient:
     def test_init(self):
         """Test client initialization."""
         client = ArxivClient()
-        assert client.BASE_URL == "http://export.arxiv.org/api/query"
+        assert client.BASE_URL == "https://export.arxiv.org/api/query"
         assert client.RATE_LIMIT_DELAY == 3
         client.close()
 
@@ -144,10 +144,13 @@ class TestOpenAlexClient:
 
     def test_init_with_email(self):
         """Test client initialization with email."""
-        client = OpenAlexClient(email="test@example.com")
-        assert client.email == "test@example.com"
-        assert "mailto" in client.client.params
-        client.close()
+        with patch.dict(os.environ, {"OPENALEX_API_KEY": ""}, clear=False):
+            if "OPENALEX_API_KEY" in os.environ:
+                del os.environ["OPENALEX_API_KEY"]
+            client = OpenAlexClient(email="test@example.com")
+            assert client.email == "test@example.com"
+            assert "mailto" in client.client.params
+            client.close()
 
     def test_init_requires_auth(self):
         """Test that initialization requires either API key or email."""
