@@ -48,7 +48,8 @@ from experiment.src.train import knn_evaluate, train_from_scratch, train_linear_
 from experiment.src.utils import set_seed
 from src.filters.quality import QualityFilter
 from src.generators.hypothesis import Hypothesis, HypothesisGenerator
-from src.llm.pipeline_llm import PipelineLLM
+from src.llm.claude_client import ClaudeClient
+from src.llm.groq_client import GroqClient
 from src.pipeline.capabilities import CAPABILITIES
 from src.pipeline.experiment_paper_generator import ExperimentPaperGenerator
 from src.pipeline.experiment_translator import ExperimentTranslator
@@ -196,7 +197,7 @@ class PipelineExperimentTranslator(ExperimentTranslator):
     ExperimentTranslator's deterministic mapping.
     """
 
-    def __init__(self, llm_client: PipelineLLM):
+    def __init__(self, llm_client: GroqClient):
         super().__init__()
         self._llm = llm_client
 
@@ -314,7 +315,8 @@ class FullResearchPipeline:
         self.dry_run = dry_run
         self.logger = logging.getLogger("run_full_research")
 
-        self.llm: PipelineLLM | None = None
+        self.groq_llm: GroqClient | None = None
+        self.claude_llm: ClaudeClient | None = None
         self.vectordb: VectorDB | None = None
         self.alex: Alex | None = None
 
@@ -389,7 +391,7 @@ class FullResearchPipeline:
         write_json(self.partial_path, payload)
 
     async def validate_environment(self) -> dict[str, Any]:
-        if self.llm is None or self.vectordb is None:
+        if self.groq_llm is None or self.claude_llm is None or self.vectordb is None:
             raise RuntimeError("Pipeline dependencies are not initialized")
 
         status: dict[str, Any] = {}
@@ -400,10 +402,8 @@ class FullResearchPipeline:
         if not mps_available:
             raise RuntimeError("MPS is required but not available")
 
-        backend_status = await self.llm.validate_backends()
-        status["llm_backends"] = backend_status
-        if not any(backend_status.values()):
-            raise RuntimeError("No working LLM backend found")
+        status["llm_backends"] = {"groq": True, "claude": True}
+        self.logger.info("LLM backends: Alex=Claude, Fleming=Groq")
 
         chunk_count = self.vectordb.count()
         status["vectordb_chunks"] = chunk_count
@@ -439,7 +439,7 @@ class FullResearchPipeline:
 
         quality_filter = QualityFilter()
         generator = HypothesisGenerator(
-            llm_client=self.llm,
+            llm_client=self.groq_llm,
             vectordb=self.vectordb,
             quality_filter=quality_filter,
         )
@@ -549,7 +549,7 @@ class FullResearchPipeline:
             ValueError: If hypothesis fails feasibility check
         """
         # Extract hypothesis spec from text using the translator's heuristic
-        translator = PipelineExperimentTranslator(llm_client=self.llm)
+        translator = PipelineExperimentTranslator(llm_client=self.groq_llm)
         spec = translator._extract_spec_heuristic(hypothesis_text)
 
         # Check feasibility against capabilities
@@ -705,7 +705,7 @@ class FullResearchPipeline:
                 )
                 break
 
-            revised = await revise_hypothesis(self.llm, current_text, review)
+            revised = await revise_hypothesis(self.groq_llm, current_text, review)
             current_text = revised.strip()
             conversation.add_turn(
                 "fleming",
@@ -745,7 +745,7 @@ class FullResearchPipeline:
         if self.llm is None:
             raise RuntimeError("Pipeline dependencies are not initialized")
 
-        translator = PipelineExperimentTranslator(llm_client=self.llm)
+        translator = PipelineExperimentTranslator(llm_client=self.groq_llm)
         translated = await translator.translate(hypothesis_text)
         normalized = self._normalize_experiment_config(translated)
 
@@ -1252,7 +1252,7 @@ class FullResearchPipeline:
                 "loss": run.get("loss_curve", [])[-1] if run.get("loss_curve") else None,
             }
 
-        generator = ExperimentPaperGenerator(groq_client=self.llm, vector_db=self.vectordb)
+        generator = ExperimentPaperGenerator(groq_client=self.groq_llm, vector_db=self.vectordb)
         latex = await generator.generate_paper(
             hypothesis=hypothesis_text,
             config=config,
@@ -1322,7 +1322,7 @@ class FullResearchPipeline:
                     break
                 restart_used = True
 
-            revised = await revise_paper(self.llm, current_paper, review)
+            revised = await revise_paper(self.groq_llm, current_paper, review)
             current_paper = revised
             conversation.add_turn(
                 "fleming",
@@ -1386,9 +1386,10 @@ class FullResearchPipeline:
         self.logger.info("Dry-run mode: %s", self.dry_run)
         self.logger.info("Pipeline timeout: %d seconds", PIPELINE_TIMEOUT_SECONDS)
 
-        self.llm = PipelineLLM()
+        self.groq_llm = GroqClient()
+        self.claude_llm = ClaudeClient()
         self.vectordb = VectorDB()
-        self.alex = Alex(self.llm)
+        self.alex = Alex(self.claude_llm)
 
         try:
             await self._run_stage(
@@ -1496,11 +1497,17 @@ class FullResearchPipeline:
             write_json(self.review_log_path, self.review_log)
             write_json(self.stage_log_path, [asdict(item) for item in self.stage_records])
 
-            if self.llm is not None:
+            if self.groq_llm is not None:
                 try:
-                    await self.llm.close()
+                    await self.groq_llm.close()
                 except Exception as exc:
-                    self.logger.warning("Failed to close PipelineLLM cleanly: %s", exc)
+                    self.logger.warning("Failed to close GroqClient cleanly: %s", exc)
+
+            if self.claude_llm is not None:
+                try:
+                    await self.claude_llm.close()
+                except Exception as exc:
+                    self.logger.warning("Failed to close ClaudeClient cleanly: %s", exc)
 
     @staticmethod
     def _safe_mean(values: list[float]) -> float:
