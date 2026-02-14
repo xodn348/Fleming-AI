@@ -13,7 +13,13 @@ from typing import Optional, Any
 from src.llm.groq_client import GroqClient
 from src.reviewers.alex import Alex
 from src.reviewers.conversation import ConversationManager
-from src.pipeline.review_gates import HypothesisGate, ExperimentDesignGate, ResultsGate, PaperGate
+from src.pipeline.review_gates import (
+    HypothesisGate,
+    ExperimentDesignGate,
+    PreExecutionGate,
+    ResultsGate,
+    PaperGate,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +79,14 @@ class FlemingAlexOrchestrator:
                 result.final_design = design
                 result.conversation_logs["experiment_design"] = design_log
 
+                pre_exec_artifact = {"hypothesis": hypothesis, "config": design}
+                pre_exec, pre_exec_log = await self._run_stage(
+                    "pre_execution", pre_exec_artifact, PreExecutionGate
+                )
+                result.conversation_logs["pre_execution"] = pre_exec_log
+                design = pre_exec.get("config", design)
+                result.final_design = design
+
                 mock_results = {"accuracy": {"ViT": 0.85, "ResNet": 0.82}}
                 results, results_log = await self._run_stage("results", mock_results, ResultsGate)
                 result.final_results = results
@@ -129,7 +143,7 @@ class FlemingAlexOrchestrator:
                 raise PipelineRestartRequired()
 
             final_artifact = gate_result.final_artifact
-            if stage_name in ["experiment_design", "results"]:
+            if stage_name in ["experiment_design", "pre_execution", "results"]:
                 try:
                     final_artifact = json.loads(final_artifact)
                 except Exception:
@@ -138,7 +152,7 @@ class FlemingAlexOrchestrator:
             return final_artifact, conversation.state.turns
 
         final_artifact = gate_result.final_artifact
-        if stage_name in ["experiment_design", "results"]:
+        if stage_name in ["experiment_design", "pre_execution", "results"]:
             try:
                 final_artifact = json.loads(final_artifact)
             except Exception:

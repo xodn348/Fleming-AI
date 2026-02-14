@@ -13,9 +13,46 @@ from typing import Optional
 from src.reviewers.alex import Alex
 from src.reviewers.conversation import ConversationManager
 from src.reviewers.schemas import ReviewResult
-from src.llm.groq_client import GroqClient
+from src.llm.claude_client import ClaudeClient
 
 logger = logging.getLogger(__name__)
+
+
+def strip_markdown_code_fences(text: str) -> str:
+    """
+    Strip markdown code fences and extract LaTeX content.
+
+    Handles patterns like:
+    ```latex
+    \\documentclass{article}
+    ...
+    ```
+
+    Or commentary before LaTeX:
+    # Some comment
+    \\documentclass{article}
+    """
+    text = text.strip()
+
+    if "```latex" in text or "```tex" in text:
+        start_markers = ["```latex", "```tex", "```"]
+        end_marker = "```"
+        for marker in start_markers:
+            if marker in text:
+                parts = text.split(marker, 1)
+                if len(parts) > 1:
+                    content = parts[1]
+                    if end_marker in content:
+                        text = content.split(end_marker, 1)[0].strip()
+                    else:
+                        text = content.strip()
+                break
+
+    if "\\documentclass" in text:
+        doc_start = text.find("\\documentclass")
+        text = text[doc_start:]
+
+    return text
 
 
 @dataclass
@@ -33,7 +70,7 @@ class GateResult:
 # ============================================================================
 
 
-async def revise_hypothesis(llm: GroqClient, original: str, feedback: ReviewResult) -> str:
+async def revise_hypothesis(llm: ClaudeClient, original: str, feedback: ReviewResult) -> str:
     """Revise hypothesis based on Alex's feedback.
 
     Args:
@@ -87,7 +124,9 @@ Output ONLY the revised hypothesis text, no preamble."""
     return revised
 
 
-async def revise_experiment_design(llm: GroqClient, original: dict, feedback: ReviewResult) -> dict:
+async def revise_experiment_design(
+    llm: ClaudeClient, original: dict, feedback: ReviewResult
+) -> dict:
     """Revise experiment design based on feedback.
 
     Args:
@@ -149,7 +188,79 @@ Output ONLY the revised design as valid JSON."""
     return revised
 
 
-async def revise_results(llm: GroqClient, original: dict, feedback: ReviewResult) -> dict:
+async def revise_pre_execution(
+    llm: ClaudeClient, artifact_json: dict, feedback: ReviewResult
+) -> dict:
+    """Revise experiment config based on pre-execution feedback.
+
+    Args:
+        llm: LLM client
+        artifact_json: Dict with 'hypothesis' and 'config' keys
+        feedback: Alex's review
+
+    Returns:
+        Revised dict with updated config (hypothesis unchanged)
+    """
+    hypothesis = artifact_json.get("hypothesis", "")
+    original_config = artifact_json.get("config", {})
+
+    weaknesses_str = "\n".join(f"- {w}" for w in feedback.weaknesses)
+    suggestions_str = "\n".join(f"- {s}" for s in feedback.suggestions)
+
+    prompt = f"""You are Fleming. Revise your experiment config to align with the hypothesis based on reviewer feedback.
+
+HYPOTHESIS (DO NOT CHANGE):
+{hypothesis}
+
+ORIGINAL CONFIG:
+{json.dumps(original_config, indent=2)}
+
+WEAKNESSES:
+{weaknesses_str}
+
+SUGGESTIONS:
+{suggestions_str}
+
+Instructions:
+1. Address all semantic mismatches between hypothesis and config
+2. Fix model types, training modes, datasets to match hypothesis
+3. Keep hypothesis UNCHANGED - only revise config
+4. Ensure config can test the hypothesis claims
+
+Output ONLY the revised config as valid JSON."""
+
+    logger.info("Fleming revising pre-execution config")
+    revised_json = await llm.generate(prompt, max_tokens=2000, temperature=0.7)
+
+    try:
+        if "```json" in revised_json:
+            revised_json = revised_json.split("```json")[1].split("```")[0]
+        elif "```" in revised_json:
+            revised_json = revised_json.split("```")[1].split("```")[0]
+
+        revised_json = revised_json.strip()
+        # Validate completeness
+        if revised_json and revised_json[-1] not in ".!?}":
+            for i in range(len(revised_json) - 1, -1, -1):
+                if revised_json[i] in ".!?}":
+                    revised_json = revised_json[: i + 1]
+                    break
+            else:
+                revised_json = revised_json.rstrip(",;: ") + "}"
+
+        revised_config = json.loads(revised_json)
+    except Exception as e:
+        logger.warning(f"Failed to parse revised config JSON: {e}. Using fallback.")
+        revised_config = original_config.copy()
+        revised_config["reviewer_suggestions"] = feedback.suggestions
+
+    await asyncio.sleep(2.0)
+
+    # Return combined artifact with hypothesis unchanged
+    return {"hypothesis": hypothesis, "config": revised_config}
+
+
+async def revise_results(llm: ClaudeClient, original: dict, feedback: ReviewResult) -> dict:
     """Revise analysis results based on feedback.
 
     Args:
@@ -212,7 +323,7 @@ Output as JSON."""
     return revised
 
 
-async def revise_paper(llm: GroqClient, original: str, feedback: ReviewResult) -> str:
+async def revise_paper(llm: ClaudeClient, original: str, feedback: ReviewResult) -> str:
     """Revise paper draft based on feedback.
 
     Args:
@@ -251,7 +362,8 @@ Output the revised version of the ENTIRE paper (or specific sections that need c
     logger.info("Fleming revising paper draft")
     revised = await llm.generate(prompt, max_tokens=4096, temperature=0.7)
 
-    revised = revised.strip()
+    revised = strip_markdown_code_fences(revised)
+
     if revised.startswith('"') and revised.endswith('"'):
         revised = revised[1:-1]
 
@@ -272,7 +384,7 @@ Output the revised version of the ENTIRE paper (or specific sections that need c
 class ReviewGate(ABC):
     """Base class for review gates."""
 
-    def __init__(self, alex: Alex, conversation: ConversationManager, llm: GroqClient):
+    def __init__(self, alex: Alex, conversation: ConversationManager, llm: ClaudeClient):
         """Initialize review gate.
 
         Args:
@@ -398,6 +510,33 @@ class ExperimentDesignGate(ReviewGate):
     async def _revise_artifact(self, artifact: str, feedback: ReviewResult) -> str:
         design = json.loads(artifact) if isinstance(artifact, str) else artifact
         revised = await revise_experiment_design(self.llm, design, feedback)
+        return json.dumps(revised, indent=2)
+
+
+class PreExecutionGate(ReviewGate):
+    """Review gate for pre-execution stage - validates hypothesis-config alignment."""
+
+    def _get_stage_name(self) -> str:
+        return "pre_execution"
+
+    async def _review_artifact(self, artifact: str) -> ReviewResult:
+        artifact_dict = json.loads(artifact) if isinstance(artifact, str) else artifact
+        hypothesis = artifact_dict.get("hypothesis", "")
+        config = artifact_dict.get("config", {})
+
+        config_str = json.dumps(config, indent=2)
+
+        return await self.alex.review(
+            stage="pre_execution",
+            artifact=artifact,
+            conversation_history=self.conversation.state.turns,
+            hypothesis=hypothesis,
+            experiment_design=config_str,
+        )
+
+    async def _revise_artifact(self, artifact: str, feedback: ReviewResult) -> str:
+        artifact_dict = json.loads(artifact) if isinstance(artifact, str) else artifact
+        revised = await revise_pre_execution(self.llm, artifact_dict, feedback)
         return json.dumps(revised, indent=2)
 
 

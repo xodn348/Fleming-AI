@@ -40,6 +40,7 @@ class Alex:
         self.stage_prompts = {
             "hypothesis": knowledge.HYPOTHESIS_REVIEW_PROMPT,
             "experiment_design": knowledge.EXPERIMENT_DESIGN_REVIEW_PROMPT,
+            "pre_execution": knowledge.PRE_EXECUTION_REVIEW_PROMPT,
             "results": knowledge.RESULTS_REVIEW_PROMPT,
             "paper": knowledge.PAPER_REVIEW_PROMPT,
         }
