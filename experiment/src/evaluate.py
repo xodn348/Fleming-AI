@@ -10,7 +10,7 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 
-from experiment.src.datasets import get_num_classes, get_transforms, load_dataset
+from experiment.src.datasets import DATASET_REGISTRY, get_num_classes, get_transforms, load_dataset
 from experiment.src.models import extract_features, load_model
 from experiment.src.train import knn_evaluate, train_linear_probe
 from experiment.src.utils import set_seed
@@ -57,8 +57,9 @@ def run_single_experiment(config: dict) -> dict:
 
     model = load_model(arch=arch, pretrained=pretrained, num_classes=num_classes)
 
-    train_transform = get_transforms(pretrained=pretrained, train=False)
-    test_transform = get_transforms(pretrained=pretrained, train=False)
+    image_size = DATASET_REGISTRY[dataset_name]["image_size"]
+    train_transform = get_transforms(pretrained=pretrained, train=True, image_size=image_size)
+    test_transform = get_transforms(pretrained=pretrained, train=False, image_size=image_size)
 
     train_ds = load_dataset(dataset_name, split="train", transform=train_transform)
     test_ds = load_dataset(dataset_name, split="test", transform=test_transform)
@@ -76,16 +77,30 @@ def run_single_experiment(config: dict) -> dict:
     metadata: dict = {}
 
     if eval_method == "linear_probe":
+        # Split train data 80/20 BEFORE LR search to prevent data leak
+        # The 20% validation split is used ONLY for LR selection, not final training
+        from sklearn.model_selection import train_test_split
+
+        train_features_split, _val_features_split, train_labels_split, _val_labels_split = (
+            train_test_split(
+                train_features, train_labels, test_size=0.2, random_state=42, stratify=train_labels
+            )
+        )
+
         probe_config = {
             "device": str(device),
             "epochs": 100,
             "lr_grid": [0.001, 0.01, 0.1, 1.0],
         }
-        result = train_linear_probe(train_features, train_labels, num_classes, probe_config)
+        # Use only 80% train split for LR search (train_linear_probe will split this further internally)
+        result = train_linear_probe(
+            train_features_split, train_labels_split, num_classes, probe_config
+        )
 
+        # Use only 80% train split for final training (validation split held out completely)
         probe_result = _train_probe_proper(
-            train_features,
-            train_labels,
+            train_features_split,
+            train_labels_split,
             test_features,
             test_labels,
             num_classes,
