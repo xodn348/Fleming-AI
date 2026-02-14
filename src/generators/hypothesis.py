@@ -12,6 +12,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from src.pipeline.capabilities import CAPABILITIES
+from src.pipeline.feasibility_checker import check_hypothesis_feasible
 from src.pipeline.hypothesis_spec import HypothesisSpec
 
 logger = logging.getLogger(__name__)
@@ -336,6 +337,13 @@ Return JSON with ALL 8 fields (HypothesisSpec format):
             result = json.loads(response)
             confidence = float(result.get("confidence", 0.5))
             result["confidence"] = min(max(confidence, 0.0), 1.0)
+
+            # Validate hypothesis against CAPABILITIES
+            is_valid, errors = check_hypothesis_feasible(result, CAPABILITIES)
+            if not is_valid:
+                logger.warning(f"LLM hypothesis infeasible: {errors}")
+                raise ValueError(f"Infeasible hypothesis: {errors}")
+
             return result
         except (json.JSONDecodeError, Exception) as e:
             logger.warning(f"Failed to generate hypothesis: {e}")
