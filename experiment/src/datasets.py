@@ -23,6 +23,7 @@ DATASET_REGISTRY: dict[str, dict] = {
         "label_key": "label",
         "train_split": "train",
         "test_split": "test",
+        "image_size": 32,
     },
     "cifar100": {
         "hf_id": "uoft-cs/cifar100",
@@ -31,6 +32,7 @@ DATASET_REGISTRY: dict[str, dict] = {
         "label_key": "fine_label",
         "train_split": "train",
         "test_split": "test",
+        "image_size": 32,
     },
     "stl10": {
         "hf_id": "tanganke/stl10",
@@ -39,6 +41,7 @@ DATASET_REGISTRY: dict[str, dict] = {
         "label_key": "label",
         "train_split": "train",
         "test_split": "test",
+        "image_size": 96,
     },
     "flowers102": {
         "hf_id": "nelorth/oxford-flowers",
@@ -47,6 +50,7 @@ DATASET_REGISTRY: dict[str, dict] = {
         "label_key": "label",
         "train_split": "train",
         "test_split": "test",
+        "image_size": 224,
     },
     "oxford_pets": {
         "hf_id": "timm/oxford-iiit-pet",
@@ -55,6 +59,7 @@ DATASET_REGISTRY: dict[str, dict] = {
         "label_key": "label",
         "train_split": "train",
         "test_split": "test",
+        "image_size": 224,
     },
 }
 
@@ -136,13 +141,14 @@ def load_dataset(
     return dataset
 
 
-def get_transforms(pretrained: bool, train: bool) -> transforms.Compose:
+def get_transforms(pretrained: bool, train: bool, image_size: int = 224) -> transforms.Compose:
     """
     Build transform pipeline for training or evaluation.
 
     Args:
         pretrained: True = use ImageNet normalization stats
         train: True = apply data augmentation, False = center crop only
+        image_size: Native resolution of dataset images (default: 224)
 
     Returns:
         torchvision.transforms.Compose pipeline
@@ -150,25 +156,49 @@ def get_transforms(pretrained: bool, train: bool) -> transforms.Compose:
     mean = IMAGENET_MEAN if pretrained else [0.5, 0.5, 0.5]
     std = IMAGENET_STD if pretrained else [0.5, 0.5, 0.5]
 
-    if train:
-        return transforms.Compose(
-            [
-                transforms.RandomResizedCrop(224),
-                transforms.RandomHorizontalFlip(),
-                transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=mean, std=std),
-            ]
-        )
+    # Small images (≤64px): process at native resolution, then upsample
+    if image_size <= 64:
+        if train:
+            return transforms.Compose(
+                [
+                    transforms.RandomCrop(image_size, padding=4),
+                    transforms.Resize(224, interpolation=transforms.InterpolationMode.BICUBIC),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=mean, std=std),
+                ]
+            )
+        else:
+            return transforms.Compose(
+                [
+                    transforms.Resize(224, interpolation=transforms.InterpolationMode.BICUBIC),
+                    transforms.CenterCrop(224),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=mean, std=std),
+                ]
+            )
+    # Large images (>64px): existing logic
     else:
-        return transforms.Compose(
-            [
-                transforms.Resize(256),
-                transforms.CenterCrop(224),
-                transforms.ToTensor(),
-                transforms.Normalize(mean=mean, std=std),
-            ]
-        )
+        if train:
+            return transforms.Compose(
+                [
+                    transforms.RandomResizedCrop(224),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=mean, std=std),
+                ]
+            )
+        else:
+            return transforms.Compose(
+                [
+                    transforms.Resize(256),
+                    transforms.CenterCrop(224),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=mean, std=std),
+                ]
+            )
 
 
 def get_num_classes(name: str) -> int:
