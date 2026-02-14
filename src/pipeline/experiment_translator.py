@@ -125,10 +125,16 @@ class ExperimentTranslator:
                 f"Invalid dataset '{spec['dataset']}'. Available datasets: {list(AVAILABLE_DATASETS.keys())}"
             )
 
+        # Get training_mode from spec with validation
+        training_mode = spec.get("training_mode", "linear_probe")
+        if training_mode not in AVAILABLE_TRAINING_MODES:
+            logger.warning(f"Unknown training_mode '{training_mode}', defaulting to linear_probe")
+            training_mode = "linear_probe"
+
         config = {
             "models": [AVAILABLE_MODELS[baseline_normalized], AVAILABLE_MODELS[variant_normalized]],
             "datasets": [AVAILABLE_DATASETS[dataset_normalized]],
-            "training_mode": "linear_probe",
+            "training_mode": training_mode,
             "epochs": 5,
             "batch_size": 128,
             "learning_rate": 0.001,
