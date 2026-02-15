@@ -792,8 +792,8 @@ class FullResearchPipeline:
                 raise RuntimeError("Alex requested RESTART_PIPELINE during pre-execution review")
 
             if review.verdict == "RESTART_STAGE":
-                self.logger.warning("Pre-execution review RESTART_STAGE; breaking")
-                break
+                self.logger.warning("Pre-execution review RESTART_STAGE; treating as REVISE")
+                # Fall through to revision logic below instead of breaking
 
             # Revise only the config, keep hypothesis unchanged
             revised = await revise_pre_execution(self.claude_llm, current_artifact, review)
