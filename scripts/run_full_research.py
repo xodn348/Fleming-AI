@@ -61,7 +61,7 @@ from src.pipeline.capabilities import CAPABILITIES
 from src.pipeline.experiment_paper_generator import ExperimentPaperGenerator
 from src.pipeline.experiment_translator import ExperimentTranslator
 from src.pipeline.feasibility_checker import check_hypothesis_feasible
-from src.pipeline.review_gates import revise_hypothesis, revise_paper
+from src.pipeline.review_gates import revise_hypothesis, revise_paper, revise_pre_execution
 from src.reviewers.alex import Alex
 from src.reviewers.conversation import ConversationManager
 from src.storage.vectordb import VectorDB
@@ -322,7 +322,6 @@ class FullResearchPipeline:
         self.dry_run = dry_run
         self.logger = logging.getLogger("run_full_research")
 
-        self.groq_llm: GroqClient | None = None
         self.claude_llm: ClaudeClient | None = None
         self.vectordb: VectorDB | None = None
         self.alex: Alex | None = None
@@ -398,7 +397,7 @@ class FullResearchPipeline:
         write_json(self.partial_path, payload)
 
     async def validate_environment(self) -> dict[str, Any]:
-        if self.groq_llm is None or self.claude_llm is None or self.vectordb is None:
+        if self.claude_llm is None or self.vectordb is None:
             raise RuntimeError("Pipeline dependencies are not initialized")
 
         status: dict[str, Any] = {}
@@ -409,8 +408,8 @@ class FullResearchPipeline:
         if not mps_available:
             raise RuntimeError("MPS is required but not available")
 
-        status["llm_backends"] = {"groq": True, "claude": True}
-        self.logger.info("LLM backends: Alex=Claude, Fleming=Groq")
+        status["llm_backends"] = {"claude": True}
+        self.logger.info("LLM backend: Claude (both Alex and Fleming)")
 
         chunk_count = self.vectordb.count()
         status["vectordb_chunks"] = chunk_count
@@ -441,12 +440,12 @@ class FullResearchPipeline:
         return status
 
     async def generate_hypotheses(self) -> list[Hypothesis]:
-        if self.groq_llm is None or self.vectordb is None:
-            raise RuntimeError("Pipeline dependencies are not initialized")
+        if self.claude_llm is None or self.vectordb is None:
+            raise RuntimeError("validate_environment() must run first")
 
         quality_filter = QualityFilter()
         generator = HypothesisGenerator(
-            llm_client=self.groq_llm,
+            llm_client=self.claude_llm,
             vectordb=self.vectordb,
             quality_filter=quality_filter,
         )
@@ -556,7 +555,7 @@ class FullResearchPipeline:
             ValueError: If hypothesis fails feasibility check
         """
         # Extract hypothesis spec from text using the translator's heuristic
-        translator = PipelineExperimentTranslator(llm_client=self.groq_llm)
+        translator = PipelineExperimentTranslator(llm_client=self.claude_llm)
         spec = translator._extract_spec_heuristic(hypothesis_text)
 
         # Check feasibility against capabilities
@@ -660,7 +659,7 @@ class FullResearchPipeline:
         return round(rank_score, 4)
 
     async def review_hypothesis(self, hypotheses: list[Hypothesis]) -> dict[str, Any]:
-        if self.groq_llm is None or self.claude_llm is None or self.alex is None:
+        if self.claude_llm is None or self.alex is None:
             raise RuntimeError("Pipeline dependencies are not initialized")
 
         ranked = sorted(hypotheses, key=self._rank_hypothesis, reverse=True)
@@ -712,7 +711,7 @@ class FullResearchPipeline:
                 )
                 break
 
-            revised = await revise_hypothesis(self.groq_llm, current_text, review)
+            revised = await revise_hypothesis(self.claude_llm, current_text, review)
             current_text = revised.strip()
             conversation.add_turn(
                 "fleming",
@@ -748,11 +747,75 @@ class FullResearchPipeline:
 
         return output
 
-    async def translate_experiment(self, hypothesis_text: str) -> dict[str, Any]:
-        if self.groq_llm is None:
+    async def review_pre_execution(
+        self, hypothesis_text: str, experiment_config: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Review experiment config against hypothesis before execution."""
+        if self.claude_llm is None or self.alex is None:
             raise RuntimeError("Pipeline dependencies are not initialized")
 
-        translator = PipelineExperimentTranslator(llm_client=self.groq_llm)
+        conversation = ConversationManager(max_turns=MAX_REVIEW_TURNS)
+
+        # Combine hypothesis and config into artifact
+        artifact = {"hypothesis": hypothesis_text, "config": experiment_config}
+        current_artifact = json.dumps(artifact, indent=2)
+
+        while not conversation.is_converged():
+            # Parse current artifact
+            parsed = json.loads(current_artifact)
+
+            review = await self.alex.review(
+                stage="pre_execution",
+                artifact=current_artifact,
+                hypothesis=parsed["hypothesis"],
+                experiment_design=json.dumps(parsed["config"]),
+                conversation_history=conversation.state.turns,
+            )
+            conversation.add_turn("alex", review.verdict, review.__dict__)
+
+            self.review_log.setdefault("pre_execution_review", []).append(
+                {
+                    "timestamp": now_utc_iso(),
+                    "verdict": review.verdict,
+                    "strengths": review.strengths,
+                    "weaknesses": review.weaknesses,
+                    "suggestions": review.suggestions,
+                    "scores": review.scores,
+                    "artifact_preview": current_artifact[:400],
+                }
+            )
+
+            if review.verdict == "PASS":
+                break
+
+            if review.verdict == "RESTART_PIPELINE":
+                raise RuntimeError("Alex requested RESTART_PIPELINE during pre-execution review")
+
+            if review.verdict == "RESTART_STAGE":
+                self.logger.warning("Pre-execution review RESTART_STAGE; breaking")
+                break
+
+            # Revise only the config, keep hypothesis unchanged
+            revised = await revise_pre_execution(self.claude_llm, current_artifact, review)
+            current_artifact = revised.strip()
+            conversation.add_turn(
+                "fleming",
+                "Revised experiment config.",
+                {"artifact": current_artifact},
+            )
+
+        # Extract final config
+        final_parsed = json.loads(current_artifact)
+        final_config = final_parsed["config"]
+
+        write_json(self.review_log_path, self.review_log)
+        return final_config
+
+    async def translate_experiment(self, hypothesis_text: str) -> dict[str, Any]:
+        if self.claude_llm is None:
+            raise RuntimeError("Pipeline dependencies are not initialized")
+
+        translator = PipelineExperimentTranslator(llm_client=self.claude_llm)
         translated = await translator.translate(hypothesis_text)
         normalized = self._normalize_experiment_config(translated)
 
@@ -1246,7 +1309,7 @@ class FullResearchPipeline:
         config: dict[str, Any],
         full_results: dict[str, Any],
     ) -> str:
-        if self.groq_llm is None or self.vectordb is None:
+        if self.claude_llm is None or self.vectordb is None:
             raise RuntimeError("Pipeline dependencies are not initialized")
 
         paper_input_results: dict[str, Any] = {}
@@ -1259,7 +1322,7 @@ class FullResearchPipeline:
                 "loss": run.get("loss_curve", [])[-1] if run.get("loss_curve") else None,
             }
 
-        generator = ExperimentPaperGenerator(groq_client=self.groq_llm, vector_db=self.vectordb)
+        generator = ExperimentPaperGenerator(groq_client=self.claude_llm, vector_db=self.vectordb)
         latex = await generator.generate_paper(
             hypothesis=hypothesis_text,
             config=config,
@@ -1280,7 +1343,7 @@ class FullResearchPipeline:
         full_results: dict[str, Any],
         paper_text: str,
     ) -> str:
-        if self.groq_llm is None or self.claude_llm is None or self.alex is None:
+        if self.claude_llm is None or self.alex is None:
             raise RuntimeError("Pipeline dependencies are not initialized")
 
         conversation = ConversationManager(max_turns=MAX_REVIEW_TURNS)
@@ -1329,7 +1392,7 @@ class FullResearchPipeline:
                     break
                 restart_used = True
 
-            revised = await revise_paper(self.groq_llm, current_paper, review)
+            revised = await revise_paper(self.claude_llm, current_paper, review)
             current_paper = revised
             conversation.add_turn(
                 "fleming",
@@ -1393,7 +1456,6 @@ class FullResearchPipeline:
         self.logger.info("Dry-run mode: %s", self.dry_run)
         self.logger.info("Pipeline timeout: %d seconds", PIPELINE_TIMEOUT_SECONDS)
 
-        self.groq_llm = GroqClient()
         self.claude_llm = ClaudeClient()
         self.vectordb = VectorDB()
         self.alex = Alex(self.claude_llm)
@@ -1439,6 +1501,15 @@ class FullResearchPipeline:
             )
             if not experiment_config:
                 raise RuntimeError("Experiment translation returned empty config")
+
+            # Pre-execution review: validate config against hypothesis
+            experiment_config = await self._run_stage(
+                "pre_execution",
+                lambda: self.review_pre_execution(final_hypothesis_text, experiment_config),
+                critical=False,
+            )
+            if not experiment_config:
+                raise RuntimeError("Pre-execution review returned empty config")
 
             await self._run_stage(
                 "smoke_test",
@@ -1503,12 +1574,6 @@ class FullResearchPipeline:
         finally:
             write_json(self.review_log_path, self.review_log)
             write_json(self.stage_log_path, [asdict(item) for item in self.stage_records])
-
-            if self.groq_llm is not None:
-                try:
-                    await self.groq_llm.close()
-                except Exception as exc:
-                    self.logger.warning("Failed to close GroqClient cleanly: %s", exc)
 
             if self.claude_llm is not None:
                 try:
